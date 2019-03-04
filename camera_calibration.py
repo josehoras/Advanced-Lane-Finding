@@ -37,9 +37,9 @@ for img_name in images:
 
 # Perform camera calibration with data points over all 20 images
 ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imagepoints, gray.shape[::-1], None, None)
+# Save data into file
 save_data = {'mtx': mtx, 'dist': dist}
 pickle.dump(save_data, open('calibrate_camera.p', 'wb'))
-
 
 plot = False
 if plot:
