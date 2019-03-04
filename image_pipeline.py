@@ -116,9 +116,10 @@ def find_lane_pixels(binary_warped):
 
     # Concatenate the arrays of indices (previously was a list of lists of pixels)
     try:
-        left_lane_inds = np.concatenate(left_lane_inds)
-        right_lane_inds = np.concatenate(right_lane_inds)
+        left_lane_inds = np.concatenate(left_lane_inds).astype(int)
+        right_lane_inds = np.concatenate(right_lane_inds).astype(int)
     except ValueError:      # Avoids an error if the above is not implemented fully
+        print("Something bad happened")
         pass
 
     # Extract left and right line pixel positions
