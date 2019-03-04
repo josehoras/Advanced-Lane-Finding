@@ -135,14 +135,14 @@ def fit_polynomial(binary_warped):
     leftx, lefty, rightx, righty, out_img = find_lane_pixels(binary_warped)
 
     # Fit a second order polynomial to each using `np.polyfit`
-    left_fit = np.polyfit(lefty, leftx, 2)
-    right_fit = np.polyfit(righty, rightx, 2)
+    left_fit_cf = np.polyfit(lefty, leftx, 2)
+    right_fit_cf = np.polyfit(righty, rightx, 2)
 
     # Generate x and y values for plotting
     ploty = np.linspace(0, binary_warped.shape[0] - 1, binary_warped.shape[0])
     try:
-        left_fitx = left_fit[0] * ploty ** 2 + left_fit[1] * ploty + left_fit[2]
-        right_fitx = right_fit[0] * ploty ** 2 + right_fit[1] * ploty + right_fit[2]
+        left_fitx = left_fit_cf[0] * ploty ** 2 + left_fit_cf[1] * ploty + left_fit_cf[2]
+        right_fitx = right_fit_cf[0] * ploty ** 2 + right_fit_cf[1] * ploty + right_fit_cf[2]
     except TypeError:
         # Avoids an error if `left` and `right_fit` are still none or incorrect
         print('The function failed to fit a line!')
@@ -155,8 +155,23 @@ def fit_polynomial(binary_warped):
     # Plots the left and right polynomials on the lane lines
     # plt.plot(left_fitx, ploty, color='yellow')
     # plt.plot(right_fitx, ploty, color='yellow')
-    return out_img, left_fitx, right_fitx, ploty
 
+    return out_img, left_fit_cf, right_fit_cf, left_fitx, right_fitx, ploty
+
+
+def calculate_curvature(left_fit_cf, right_fit_cf, ploty):
+    # Calculate curvature of fits
+    # Define conversions in x and y from pixels space to meters
+    ym_per_pix = 30/720 # meters per pixel in y dimension
+    xm_per_pix = 3.7/700 # meters per pixel in x dimension
+    r_y = ploty * ym_per_pix
+    a_left = (xm_per_pix/ym_per_pix**2) * left_fit_cf[0]
+    b_left = (xm_per_pix/ym_per_pix) * left_fit_cf[1]
+    a_right = (xm_per_pix / ym_per_pix ** 2) * right_fit_cf[0]
+    b_right = (xm_per_pix / ym_per_pix) * right_fit_cf[1]
+    r_left = ((1 + (2 * a_left * r_y + b_left)**2 )**(3/2)) / abs(2 * a_left)
+    r_right = ((1 + (2 * a_right * r_y + b_right)**2 )**(3/2)) / abs(2 * a_right)
+    return np.mean(r_left), np.mean(r_right)
 
 # Plotting functions
 def plot_thresholds(gradx, grady, mag_binary, dir_binary, combined):
@@ -195,7 +210,7 @@ def plot_warping(original, warp):
 
 
 def plot_img(image):
-    plt.imshow(out_img)
+    plt.imshow(image)
     plt.show()
 
 # *** PIPELINE ***
@@ -209,7 +224,7 @@ except (OSError, IOError):  # No progress file yet available
     print("No saved distorsion data. Run camera_calibration.py")
 
 # Get one image
-img_name = "test_images/straight_lines2.jpg"
+img_name = "test_images/test2.jpg"
 img = mpimg.imread(img_name)
 
 # 1. Correct distorsion
@@ -246,14 +261,19 @@ Minv = cv2.getPerspectiveTransform(dst, src)
 # Warp the result of binary thresholds
 warped = cv2.warpPerspective(combined, M, (X,Y), flags=cv2.INTER_LINEAR)
 # Plot warping step
-plot_warping(combined, warped)
+# plot_warping(combined, warped)
 
 # 4. Get polinomial fit of lines
-out_img, left_fitx, right_fitx, ploty = fit_polynomial(warped)
+out_img, left_fit_cf, right_fit_cf,  left_fitx, right_fitx, ploty = fit_polynomial(warped)
 # Plot polynomial result
-plot_img(out_img)
+# plot_img(out_img)
 
-# 5. Plot fitted lanes into original image
+# 5. Calcutale curvature
+curv_left, curv_right = calculate_curvature(left_fit_cf, right_fit_cf, ploty)
+print("Curvature left: ", curv_left)
+print("Curvature right: ", curv_right)
+
+# 6. Plot fitted lanes into original image
 # Create an image to draw the lines on
 warp_zero = np.zeros_like(warped).astype(np.uint8)
 color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
@@ -272,5 +292,4 @@ newwarp = cv2.warpPerspective(color_warp, Minv, (img.shape[1], img.shape[0]))
 # print("newwarp: ", newwarp.shape)
 # Combine the result with the original image
 result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
-plt.imshow(result)
-plt.show()
+plot_img(result)
