@@ -1,8 +1,7 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-import glob
+from moviepy.editor import VideoFileClip
 import pickle
 
 # Threshold functions
@@ -94,15 +93,15 @@ def find_lane_pixels(binary_warped):
         win_xright_low = rightx_current - margin
         win_xright_high = rightx_current + margin
         # Draw the windows on the visualization image
-        cv2.rectangle(out_img, (win_xleft_low, win_y_low),
-                      (win_xleft_high, win_y_high), (0, 255, 0), 2)
-        cv2.rectangle(out_img, (win_xright_low, win_y_low),
-                      (win_xright_high, win_y_high), (0, 255, 0), 2)
+        # cv2.rectangle(out_img, (win_xleft_low, win_y_low),
+        #               (win_xleft_high, win_y_high), (0, 255, 0), 2)
+        # cv2.rectangle(out_img, (win_xright_low, win_y_low),
+        #               (win_xright_high, win_y_high), (0, 255, 0), 2)
         # Identify the nonzero pixels in x and y within the window
-        good_left_inds = [i for i in range(len(nonzerox)) if
+        good_left_inds = [int(i) for i in range(len(nonzerox)) if
                           win_xleft_low < nonzerox[i] < win_xleft_high and
                           win_y_low < nonzeroy[i] < win_y_high]
-        good_right_inds = [i for i in range(len(nonzerox)) if
+        good_right_inds = [int(i) for i in range(len(nonzerox)) if
                            win_xright_low < nonzerox[i] < win_xright_high and
                            win_y_low < nonzeroy[i] < win_y_high]
         # Append these indices to the lists
@@ -116,9 +115,10 @@ def find_lane_pixels(binary_warped):
 
     # Concatenate the arrays of indices (previously was a list of lists of pixels)
     try:
-        left_lane_inds = np.concatenate(left_lane_inds)
-        right_lane_inds = np.concatenate(right_lane_inds)
+        left_lane_inds = np.concatenate(left_lane_inds).astype(int)
+        right_lane_inds = np.concatenate(right_lane_inds).astype(int)
     except ValueError:      # Avoids an error if the above is not implemented fully
+        print("Something bad happened")
         pass
 
     # Extract left and right line pixel positions
@@ -174,7 +174,7 @@ def calculate_curvature(left_fit_cf, right_fit_cf, ploty):
 
 
 # Plotting functions
-def plot_thresholds(gradx, grady, mag_binary, dir_binary, combined):
+def plot_thresholds(undist, gradx, grady, mag_binary, dir_binary, hls_binary, combined):
     f, ((ax1, ax2, ax3), (ax4, ax5, ax6), (ax7, ax8, ax9)) = plt.subplots(3, 3, figsize=(12, 8))
     f.tight_layout()
     for ax in (ax1, ax2, ax3, ax4, ax5, ax6, ax7, ax8, ax9):
@@ -200,8 +200,8 @@ def plot_thresholds(gradx, grady, mag_binary, dir_binary, combined):
 
 def plot_warping(original, warp):
     # Uncomment this code to visualize the region of interest
-    for i in range(len(src)):
-        cv2.line(original, (src[i][0], src[i][1]), (src[(i+1)%4][0], src[(i+1)%4][1]), 1, 2)
+    # for i in range(len(src)):
+    #     cv2.line(original, (src[i][0], src[i][1]), (src[(i+1)%4][0], src[(i+1)%4][1]), 1, 2)
     f, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
     ax1.imshow(original)
     ax2.imshow(warp)
@@ -215,11 +215,88 @@ def plot_img(image):
 
 # *** PIPELINE ***
 
-# Open distorsion matrix
-try:
-    saved_dist = pickle.load(open('calibrate_camera.p', 'rb'), encoding='latin1')
-    mtx = saved_dist['mtx']
-    dist = saved_dist['dist']
-except (OSError, IOError):  # No progress file yet available
-    print("No saved distorsion data. Run camera_calibration.py")
+def pipeline(img):
+    # Open distorsion matrix
+    try:
+        saved_dist = pickle.load(open('calibrate_camera.p', 'rb'), encoding='latin1')
+        mtx = saved_dist['mtx']
+        dist = saved_dist['dist']
+    except (OSError, IOError):  # No progress file yet available
+        print("No saved distorsion data. Run camera_calibration.py")
 
+    # 1. Correct distorsion
+    undist = cv2.undistort(img, mtx, dist, None, mtx)
+
+    # 2. Apply filters to get binary map
+    ksize = 3
+    gradx = abs_sobel_thresh(undist, orient='x', sobel_kernel=ksize, thresh=(20, 200))
+    grady = abs_sobel_thresh(undist, orient='y', sobel_kernel=ksize, thresh=(20, 100))
+    mag_binary = mag_thresh(undist, sobel_kernel=ksize, mag_thresh=(20, 100))
+    dir_binary = dir_threshold(undist, sobel_kernel=15, thresh=(0.9, 1.1))
+    hls_binary = hls_select(img, thresh=(90, 255))
+    combined = np.zeros_like(dir_binary)
+    combined[(gradx == 1 | ((mag_binary == 1) & (dir_binary == 1))) | hls_binary == 1] = 1
+    # Plot the thresholding step
+    # plot_thresholds(undist, gradx, grady, mag_binary, dir_binary, hls_binary, combined)
+
+    # 3. Define trapezoid points on the road and transform perspective
+    X = combined.shape[1]
+    Y = combined.shape[0]
+    src = np.float32(
+            [[200, 720],
+             [1100, 720],
+             [685, 450],
+             [595, 450]])
+    dst = np.float32(
+            [[300, 720],
+             [980, 720],
+             [980, 0],
+             [300, 0]])
+    # Get perspective transformation matrix
+    M = cv2.getPerspectiveTransform(src, dst)
+    Minv = cv2.getPerspectiveTransform(dst, src)
+    # Warp the result of binary thresholds
+    warped = cv2.warpPerspective(combined, M, (X,Y), flags=cv2.INTER_LINEAR)
+    # Plot warping step
+    # plot_warping(combined, warped)
+
+    # 4. Get polinomial fit of lines
+    out_img, left_fit_cf, right_fit_cf,  left_fitx, right_fitx, ploty = fit_polynomial(warped)
+    # Plot polynomial result
+    # plot_img(out_img)
+
+    # 5. Calcutale curvature
+    curv_left, curv_right = calculate_curvature(left_fit_cf, right_fit_cf, ploty)
+    # print("Curvature left: ", curv_left)
+    # print("Curvature right: ", curv_right)
+
+    # 6. Plot fitted lanes into original image
+    # Create an image to draw the lines on
+    warp_zero = np.zeros_like(warped).astype(np.uint8)
+    color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
+
+    # Recast the x and y points into usable format for cv2.fillPoly()
+    pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
+    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
+    pts = np.hstack((pts_left, pts_right))
+
+    # Draw the lane onto the warped blank image
+    cv2.fillPoly(color_warp, np.int_([pts]), (0,255, 0))
+
+    # Warp the blank back to original image space using inverse perspective matrix (Minv)
+    newwarp = cv2.warpPerspective(color_warp, Minv, (img.shape[1], img.shape[0]))
+    # print("dst: ", dst.shape)
+    # print("newwarp: ", newwarp.shape)
+    # Combine the result with the original image
+    result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
+    cv2.putText(result, "Curvature left lane: " + str(int(curv_left)) + "m",
+                (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, 0)
+    cv2.putText(result, "Curvature right lane: " + str(int(curv_right)) + "m",
+                (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0))
+
+    return result
+
+
+clip1 = VideoFileClip("project_video.mp4")#.subclip(0, 2)
+out_clip = clip1.fl_image(pipeline)
+out_clip.write_videofile("video_output.mp4", audio=False)

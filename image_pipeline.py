@@ -174,7 +174,7 @@ def calculate_curvature(left_fit_cf, right_fit_cf, ploty):
 
 
 # Plotting functions
-def plot_thresholds(gradx, grady, mag_binary, dir_binary, combined):
+def plot_thresholds(undist, gradx, grady, mag_binary, dir_binary, hls_binary, combined):
     f, ((ax1, ax2, ax3), (ax4, ax5, ax6), (ax7, ax8, ax9)) = plt.subplots(3, 3, figsize=(12, 8))
     f.tight_layout()
     for ax in (ax1, ax2, ax3, ax4, ax5, ax6, ax7, ax8, ax9):
@@ -240,7 +240,7 @@ hls_binary = hls_select(img, thresh=(90, 255))
 combined = np.zeros_like(dir_binary)
 combined[(gradx == 1 | ((mag_binary == 1) & (dir_binary == 1))) | hls_binary == 1] = 1
 # Plot the thresholding step
-# plot_thresholds(gradx, grady, mag_binary, dir_binary, combined)
+# plot_thresholds(undist, gradx, grady, mag_binary, dir_binary, hls_binary, combined)
 
 # 3. Define trapezoid points on the road and transform perspective
 X = combined.shape[1]
