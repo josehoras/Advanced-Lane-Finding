@@ -165,13 +165,12 @@ def calculate_curvature(left_fit_cf, right_fit_cf, ploty):
     ym_per_pix = 30/720 # meters per pixel in y dimension
     xm_per_pix = 3.7/700 # meters per pixel in x dimension
     r_y = ploty * ym_per_pix
-    a_left = (xm_per_pix/ym_per_pix**2) * left_fit_cf[0]
-    b_left = (xm_per_pix/ym_per_pix) * left_fit_cf[1]
-    a_right = (xm_per_pix / ym_per_pix ** 2) * right_fit_cf[0]
-    b_right = (xm_per_pix / ym_per_pix) * right_fit_cf[1]
-    r_left = ((1 + (2 * a_left * r_y + b_left)**2 )**(3/2)) / abs(2 * a_left)
-    r_right = ((1 + (2 * a_right * r_y + b_right)**2 )**(3/2)) / abs(2 * a_right)
-    return np.mean(r_left), np.mean(r_right)
+
+    def curv(fit_cf):
+        a = (xm_per_pix / ym_per_pix ** 2) * fit_cf[0]
+        b = (xm_per_pix / ym_per_pix) * fit_cf[1]
+        return np.mean(((1 + (2 * a * r_y + b)**2)**(3/2)) / abs(2 * a))
+    return curv(left_fit_cf), curv(right_fit_cf)
 
 # Plotting functions
 def plot_thresholds(gradx, grady, mag_binary, dir_binary, combined):
@@ -224,7 +223,7 @@ except (OSError, IOError):  # No progress file yet available
     print("No saved distorsion data. Run camera_calibration.py")
 
 # Get one image
-img_name = "test_images/test2.jpg"
+img_name = "test_images/straight_lines2.jpg"
 img = mpimg.imread(img_name)
 
 # 1. Correct distorsion
@@ -266,7 +265,7 @@ warped = cv2.warpPerspective(combined, M, (X,Y), flags=cv2.INTER_LINEAR)
 # 4. Get polinomial fit of lines
 out_img, left_fit_cf, right_fit_cf,  left_fitx, right_fitx, ploty = fit_polynomial(warped)
 # Plot polynomial result
-# plot_img(out_img)
+plot_img(out_img)
 
 # 5. Calcutale curvature
 curv_left, curv_right = calculate_curvature(left_fit_cf, right_fit_cf, ploty)
