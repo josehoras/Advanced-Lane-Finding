@@ -13,22 +13,38 @@ class Line():
         self.detected = False
         # x values of the last n fits of the line
         self.recent_xfitted = []
-        #average x values of the fitted line over the last n iterations
+        # average x values of the fitted line over the last n iterations
         self.bestx = None
-        #polynomial coefficients averaged over the last n iterations
+        # polynomial coefficients averaged over the last n iterations
         self.best_fit = None
-        #polynomial coefficients for the most recent fit
+        # polynomial coefficients for the most recent fit
         self.current_fit = [np.array([False])]
-        #radius of curvature of the line in some units
+        # radius of curvature of the line in some units
         self.radius_of_curvature = None
-        #distance in meters of vehicle center from the line
+        # distance in meters of vehicle center from the line
         self.line_base_pos = None
-        #difference in fit coefficients between last and new fits
+        # difference in fit coefficients between last and new fits
         self.diffs = np.array([0,0,0], dtype='float')
-        #x values for detected line pixels
+        # x values for detected line pixels
         self.allx = None
-        #y values for detected line pixels
+        # y values for detected line pixels
         self.ally = None
+
+    def update(self, fit, x, y):
+        # self.detected = detected
+        self.current_fit = fit
+        self.allx = x
+        self.ally = y
+        self.radius_of_curvature = self.curv()
+        self.line_base_pos = self.allx[len(self.ally)-1]
+
+    def curv(self):
+        ym_per_pix = 30 / 720  # meters per pixel in y dimension
+        xm_per_pix = 3.7 / 700  # meters per pixel in x dimension
+        r_y = self.ally * ym_per_pix
+        a = (xm_per_pix / ym_per_pix ** 2) * self.current_fit[0]
+        b = (xm_per_pix / ym_per_pix) * self.current_fit[1]
+        return np.mean(((1 + (2 * a * r_y + b) ** 2) ** (3 / 2)) / abs(2 * a))
 
 
 # Threshold functions
@@ -169,7 +185,6 @@ def fit_polynomial(binary_warped):
     # Generate x and y values for plotting
     ploty = np.linspace(0, binary_warped.shape[0] - 1, binary_warped.shape[0])
 
-
     try:
         left_fitx = left_fit_cf[0] * ploty ** 2 + left_fit_cf[1] * ploty + left_fit_cf[2]
         right_fitx = right_fit_cf[0] * ploty ** 2 + right_fit_cf[1] * ploty + right_fit_cf[2]
@@ -179,11 +194,6 @@ def fit_polynomial(binary_warped):
         left_fitx = 1 * ploty ** 2 + 1 * ploty
         right_fitx = 1 * ploty ** 2 + 1 * ploty
 
-    sanity, error_msg = sanity_check(left_fit_cf, right_fit_cf, ploty, left_fitx, right_fitx)
-    if sanity:
-        left_lane.detected = True
-        right_lane.detected = True
-
     # Visualization
     out_img[lefty, leftx] = [255, 0, 0]
     out_img[righty, rightx] = [0, 0, 255]
@@ -191,53 +201,40 @@ def fit_polynomial(binary_warped):
     # plt.plot(left_fitx, ploty, color='yellow')
     # plt.plot(right_fitx, ploty, color='yellow')
 
-    return out_img, left_fit_cf, right_fit_cf, left_fitx, right_fitx, ploty, error_msg
+    return out_img, left_fit_cf, right_fit_cf, left_fitx, right_fitx, ploty
 
 
-def sanity_check(left_fit_cf, right_fit_cf, ploty, left_fitx, right_fitx):
+def sanity_check():
     # print(left_fit_cf[0], left_fit_cf[1], left_fit_cf[2])
     # print(right_fit_cf[0], right_fit_cf[1], right_fit_cf[2])
-    sane = False
+    sane = True
     err = ""
     # Is lane width around 3.7m (+/- 0.5)?
-    _, width = dist_center(left_fit_cf, right_fit_cf, ploty, 0)
-    if 3.2 < width < 4.2:
-        sane = True
-    else:
+    xm_per_pix = 3.7/700 # meters per pixel in x dimension
+    width = (right_lane.line_base_pos - left_lane.line_base_pos) * xm_per_pix
+    if width > 4.2 or width < 3.2:
+        sane = False
         err = "No right lane distance"
     # Are lanes more or less parallel?
-    lane_dist = right_fitx - left_fitx
+    lane_dist = right_lane.allx - left_lane.allx
     lane_delta = lane_dist - np.mean(lane_dist)
     # print("\n mean dist: ", np.mean(lane_dist), "max delta: ", np.max(lane_delta))
-    if np.max(lane_delta) < np.mean(lane_dist) / 10:
-        sane = True
-    else:
-        err = "No parallel lanes"
+    if np.max(lane_delta) > np.mean(lane_dist) / 10:
+        sane = False
+        err = err + " - " + "No parallel lanes"
+    # Is the curvature similar?
+    if left_lane.radius_of_curvature < 2000 or right_lane.radius_of_curvature < 2000:
+        if abs(left_lane.radius_of_curvature - right_lane.radius_of_curvature) > 200:
+            sane = False
+            err = err + " - " + "No same curvature"
     return sane, err
 
 
-def calculate_curvature(left_fit_cf, right_fit_cf, ploty):
-    # Calculate curvature of fits
-    # Define conversions in x and y from pixels space to meters
-    ym_per_pix = 30/720 # meters per pixel in y dimension
+def lane_offset(screen_size):
     xm_per_pix = 3.7/700 # meters per pixel in x dimension
-    r_y = ploty * ym_per_pix
-
-    def curv(fit_cf):
-        a = (xm_per_pix / ym_per_pix ** 2) * fit_cf[0]
-        b = (xm_per_pix / ym_per_pix) * fit_cf[1]
-        return np.mean(((1 + (2 * a * r_y + b)**2)**(3/2)) / abs(2 * a))
-    return curv(left_fit_cf), curv(right_fit_cf)
-
-
-def dist_center(left_fit_cf, right_fit_cf, ploty, car_x):
-    left_fitx = left_fit_cf[0] * np.max(ploty) ** 2 + left_fit_cf[1] * np.max(ploty) + left_fit_cf[2]
-    right_fitx = right_fit_cf[0] * np.max(ploty) ** 2 + right_fit_cf[1] * np.max(ploty) + right_fit_cf[2]
-    xm_per_pix = 3.7/700
-    lane_width_px = (right_fitx - left_fitx)
-    lane_width_m = lane_width_px * xm_per_pix
-    offset = ((right_fitx - left_fitx) / 2 - car_x) * xm_per_pix
-    return offset, lane_width_m
+    lane_w = (right_lane.line_base_pos - left_lane.line_base_pos) * xm_per_pix
+    offset = (((right_lane.line_base_pos + left_lane.line_base_pos) - screen_size) / 2) * xm_per_pix
+    return lane_w, offset
 
 
 # Plotting functions
@@ -328,16 +325,20 @@ def pipeline(img):
     # plot_warping(combined, warped)
 
     # 4. Get polinomial fit of lines
-    out_img, left_fit_cf, right_fit_cf,  left_fitx, right_fitx, ploty, error_msg = fit_polynomial(warped)
+    out_img, left_fit_cf, right_fit_cf,  left_fitx, right_fitx, ploty = fit_polynomial(warped)
 
+    left_lane.update(left_fit_cf, left_fitx, ploty)
+    right_lane.update(right_fit_cf, right_fitx, ploty)
+
+    sanity, error_msg = sanity_check()
+    if sanity:
+        left_lane.detected = True
+        right_lane.detected = True
     # Plot polynomial result
     # plot_img(out_img)
 
     # 5. Calcutale curvature and distance to center
-    curv_left, curv_right = calculate_curvature(left_fit_cf, right_fit_cf, ploty)
-    offset, lane_w = dist_center(left_fit_cf, right_fit_cf, ploty, img.shape[1]/2)
-    # print("Curvature left: ", curv_left)
-    # print("Curvature right: ", curv_right)
+    lane_w, offset = lane_offset(img.shape[1])
 
     # 6. Plot fitted lanes into original image
     # Create an image to draw the lines on
@@ -358,11 +359,13 @@ def pipeline(img):
     # Combine the result with the original image
     result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
     # Add text
+    curv_left_txt = str(int(left_lane.radius_of_curvature))
+    curv_right_txt = str(int(right_lane.radius_of_curvature))
     lane_width_txt = "%.2f" %lane_w
     lane_off_txt = "%.2f" %offset
-    cv2.putText(result, "Curvature left lane: " + str(int(curv_left)) + "m",
+    cv2.putText(result, "Curvature left lane: " + curv_left_txt + "m",
                 (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
-    cv2.putText(result, "Curvature right lane: " + str(int(curv_right)) + "m",
+    cv2.putText(result, "Curvature right lane: " + curv_right_txt + "m",
                 (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
     cv2.putText(result, "Lane width: " + lane_width_txt + "m",
                 (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
@@ -374,7 +377,7 @@ def pipeline(img):
     return result
 
 
-clip_name = "harder_challenge_video"
+clip_name = "project_video"
 clip1 = VideoFileClip(clip_name + ".mp4").subclip(0, 4)
 
 left_lane = Line()
