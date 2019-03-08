@@ -142,10 +142,10 @@ def find_lane_pixels(binary_warped):
         # cv2.rectangle(out_img, (win_xright_low, win_y_low),
         #               (win_xright_high, win_y_high), (0, 255, 0), 2)
         # Identify the nonzero pixels in x and y within the window
-        good_left_inds = [int(i) for i in range(len(nonzerox)) if
+        good_left_inds = [i for i in range(len(nonzerox)) if
                           win_xleft_low < nonzerox[i] < win_xleft_high and
                           win_y_low < nonzeroy[i] < win_y_high]
-        good_right_inds = [int(i) for i in range(len(nonzerox)) if
+        good_right_inds = [i for i in range(len(nonzerox)) if
                            win_xright_low < nonzerox[i] < win_xright_high and
                            win_y_low < nonzeroy[i] < win_y_high]
         # Append these indices to the lists
@@ -174,9 +174,40 @@ def find_lane_pixels(binary_warped):
     return leftx, lefty, rightx, righty, out_img
 
 
+def find_lane_around_fit(binary_warped):
+    # HYPERPARAMETER
+    margin = 100
+    # Create an output image to draw on and visualize the result
+    out_img = np.dstack((binary_warped, binary_warped, binary_warped))
+    # Grab activated pixels
+    nonzero = binary_warped.nonzero()
+    nonzeroy = np.array(nonzero[0])
+    nonzerox = np.array(nonzero[1])
+    all_y = range(binary_warped.shape[0])
+
+    x_left = [left_lane.current_fit[0] * y ** 2 + left_lane.current_fit[1] * y + left_lane.current_fit[2]
+              for y in range(binary_warped.shape[0])]
+    x_right = [right_lane.current_fit[0] * y ** 2 + right_lane.current_fit[1] * y + right_lane.current_fit[2]
+               for y in range(binary_warped.shape[0])]
+
+    left_lane_inds = [i for i in range(len(nonzerox)) if
+                      x_left[nonzeroy[i]] - margin < nonzerox[i] < x_left[nonzeroy[i]] + margin]
+    right_lane_inds = [i for i in range(len(nonzerox)) if
+                       x_right[nonzeroy[i]] - margin < nonzerox[i] < x_right[nonzeroy[i]] + margin]
+
+    # Again, extract left and right line pixel positions
+    leftx = nonzerox[left_lane_inds]
+    lefty = nonzeroy[left_lane_inds]
+    rightx = nonzerox[right_lane_inds]
+    righty = nonzeroy[right_lane_inds]
+    return leftx, lefty, rightx, righty, out_img
+
 def fit_polynomial(binary_warped):
     # Find our lane pixels first
-    leftx, lefty, rightx, righty, out_img = find_lane_pixels(binary_warped)
+    if left_lane.detected and right_lane.detected:
+        leftx, lefty, rightx, righty, out_img = find_lane_around_fit(binary_warped)
+    else:
+        leftx, lefty, rightx, righty, out_img = find_lane_pixels(binary_warped)
 
     # Fit a second order polynomial to each using `np.polyfit`
     left_fit_cf = np.polyfit(lefty, leftx, 2)
@@ -346,8 +377,8 @@ def pipeline(img):
     color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
 
     # Recast the x and y points into usable format for cv2.fillPoly()
-    pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
-    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
+    pts_left = np.array([np.transpose(np.vstack([left_lane.allx, left_lane.ally]))])
+    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_lane.allx, right_lane.ally])))])
     pts = np.hstack((pts_left, pts_right))
 
     # Draw the lane onto the warped blank image
@@ -361,8 +392,8 @@ def pipeline(img):
     # Add text
     curv_left_txt = str(int(left_lane.radius_of_curvature))
     curv_right_txt = str(int(right_lane.radius_of_curvature))
-    lane_width_txt = "%.2f" %lane_w
-    lane_off_txt = "%.2f" %offset
+    lane_width_txt = "%.2f" % lane_w
+    lane_off_txt = "%.2f" % offset
     cv2.putText(result, "Curvature left lane: " + curv_left_txt + "m",
                 (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
     cv2.putText(result, "Curvature right lane: " + curv_right_txt + "m",
