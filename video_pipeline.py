@@ -3,7 +3,7 @@ import cv2
 import matplotlib.pyplot as plt
 from moviepy.editor import VideoFileClip
 import pickle
-
+from image_thresholding import *
 
 # Class Line
 # Define a class to receive the characteristics of each line detection
@@ -42,55 +42,6 @@ class Line():
         self.ally = y
         self.curv = curv
         self.base_pos = self.allx[len(self.ally)-1]
-
-
-# Threshold functions
-def abs_sobel_thresh(img, orient='x', sobel_kernel=3, thresh=(0, 255)):
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    if orient=='x':
-        sobel = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
-    elif orient=='y':
-        sobel = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
-    abs_sobel = np.abs(sobel)
-    scaled_sobel = np.uint8(255*abs_sobel/np.max(abs_sobel))
-    grad_binary = np.zeros_like(abs_sobel)
-    grad_binary[(scaled_sobel >= thresh[0]) & (scaled_sobel <= thresh[1])] = 1
-    return grad_binary
-
-
-def mag_thresh(img, sobel_kernel=3, mag_thresh=(0, 255)):
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
-    sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
-    mag_sobel = np.sqrt(sobelx**2 + sobely**2)
-    scaled_sobel = np.uint8(255*mag_sobel/np.max(mag_sobel))
-    mag_binary = np.zeros_like(gray)
-    mag_binary[(scaled_sobel >= mag_thresh[0]) & (scaled_sobel <= mag_thresh[1])] = 1
-    return mag_binary
-
-
-def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi / 2)):
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
-    sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
-    abs_sobelx = np.abs(sobelx)
-    abs_sobely = np.abs(sobely)
-    dir_sobel = np.arctan2(abs_sobely, abs_sobelx)
-    binary_output = np.zeros_like(gray)
-    binary_output[(dir_sobel >= thresh[0]) & (dir_sobel <= thresh[1])] = 1
-    return binary_output
-
-
-def hls_select(img, thresh=(0, 255)):
-    # 1) Convert to HLS color space
-    hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
-    # 2) Apply a threshold to the S channel
-    s = hls[:, :, 2]
-    binary_output = np.zeros_like(s)
-    binary_output[(s > thresh[0]) & (s <= thresh[1])] = 1
-    # 3) Return a binary image of threshold result
-    # binary_output = np.copy(img) # placeholder line
-    return binary_output
 
 
 # Functions for polynomial fitting step
@@ -230,86 +181,30 @@ def find_curv(ally, left_fit, right_fit):
     return curv(left_fit), curv(right_fit)
 
 
-def fit_polynomial(binary_warped):
-
-    def check_and_update(leftx, lefty, rightx, righty):
-        # Fit a second order polynomial to each using `np.polyfit`
-        left_fit = np.polyfit(lefty, leftx, 2)
-        right_fit = np.polyfit(righty, rightx, 2)
-        # Generate x and y values for plotting
-        ploty = np.linspace(0, binary_warped.shape[0] - 1, binary_warped.shape[0])
-        left_px = left_fit[0] * ploty ** 2 + left_fit[1] * ploty + left_fit[2]
-        right_px = right_fit[0] * ploty ** 2 + right_fit[1] * ploty + right_fit[2]
-        # calculate curvature
-        left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
-        # perform sanity check on new lines
-        sane, err = sanity_chk(ploty, left_fit, right_fit, left_px, right_px, left_curv, right_curv)
-        # if fine, we update the lanes values with this last fit
-        if sane or left_lane.fit_method == "Boxes":
-            left_lane.update(ploty, left_fit, left_px, left_curv)
-            right_lane.update(ploty, right_fit, right_px, right_curv)
-            left_lane.err_msg = err
-        # if wrong we don't update and go with previous fit for some frames until doing the box method
-        else:
-            left_lane.detected = False
-            right_lane.detected = False
-            left_lane.err_msg = err
-
-    # Find our lane pixels first
-    # If lanes were detected on previous frame search for new lane around that location
-    if left_lane.detected and right_lane.detected:
-        leftx, lefty, rightx, righty, out_img = find_lane_around_fit(binary_warped)
-        left_lane.fit_method = "Around fit"
-        right_lane.fit_method = "Around fit"
-        check_and_update(leftx, lefty, rightx, righty)
-    # if we already skipped some frames (or at the baginning, as we initialize frames to a high value)
-    # then do boxes method
+def fit_and_update(leftx, lefty, rightx, righty, y_px):
+    # Fit a second order polynomial to each using `np.polyfit`
+    left_fit = np.polyfit(lefty, leftx, 2)
+    right_fit = np.polyfit(righty, rightx, 2)
+    # Generate x and y values for plotting
+    ploty = np.linspace(0, y_px - 1, y_px)
+    left_px = left_fit[0] * ploty ** 2 + left_fit[1] * ploty + left_fit[2]
+    right_px = right_fit[0] * ploty ** 2 + right_fit[1] * ploty + right_fit[2]
+    # calculate curvature
+    left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
+    # perform sanity check on new lines
+    sane, err = sanity_chk(ploty, left_fit, right_fit, left_px, right_px, left_curv, right_curv)
+    # if fine, we update the lanes values with this last fit
+    if sane or left_lane.fit_method == "Boxes":
+        left_lane.update(ploty, left_fit, left_px, left_curv)
+        right_lane.update(ploty, right_fit, right_px, right_curv)
+        left_lane.skip_frames = 0
+        left_lane.err_msg = err
+    # if wrong we don't update and go with previous fit for some frames until doing the box method
     else:
+        left_lane.detected = False
+        right_lane.detected = False
         left_lane.skip_frames += 1
-        out_img = np.dstack((binary_warped, binary_warped, binary_warped))
-        if left_lane.skip_frames > 5:
-            leftx, lefty, rightx, righty, out_img = find_lane_pixels(binary_warped)
-            left_lane.skip_frames = 0
-            left_lane.fit_method = "Boxes"
-            right_lane.fit_method = "Boxes"
-            check_and_update(leftx, lefty, rightx, righty)
-
-    # print(left_lane.fit_method)
-
-    # Visualization
-    # out_img[lefty, leftx] = [255, 0, 0]
-    # out_img[righty, rightx] = [0, 0, 255]
-    # Plots the left and right polynomials on the lane lines
-    # plt.plot(left_fitx, ploty, color='yellow')
-    # plt.plot(right_fitx, ploty, color='yellow')
-
-    return out_img
-
-
-def sanity_check():
-    # print(left_fit_cf[0], left_fit_cf[1], left_fit_cf[2])
-    # print(right_fit_cf[0], right_fit_cf[1], right_fit_cf[2])
-    sane = True
-    err = ""
-    # Is lane width around 3.7m (+/- 0.5)?
-    xm_per_pix = 3.7/700 # meters per pixel in x dimension
-    width = (right_lane.base_pos - left_lane.base_pos) * xm_per_pix
-    if width > 4.2 or width < 3.2:
-        sane = False
-        err = "No right lane distance"
-    # Are lanes more or less parallel?
-    lane_dist = right_lane.allx - left_lane.allx
-    lane_delta = lane_dist - np.mean(lane_dist)
-    # print("\n mean dist: ", np.mean(lane_dist), "max delta: ", np.max(lane_delta))
-    if np.max(lane_delta) > np.mean(lane_dist) / 10:
-        sane = False
-        err = err + " - " + "No parallel lanes"
-    # Is the curvature similar?
-    if left_lane.curv < 2000 or right_lane.curv < 2000:
-        if abs(left_lane.curv - right_lane.curv) > 200:
-            sane = False
-            err = err + " - " + "No same curvature"
-    return sane, err
+        left_lane.err_msg = err
 
 
 def lane_offset(screen_size):
@@ -407,7 +302,20 @@ def pipeline(img):
     # plot_warping(combined, warped)
 
     # 4. Get polinomial fit of lines
-    out_img = fit_polynomial(warped)
+    # If lanes were detected on previous frame search for new lane around that location
+    if left_lane.skip_frames < 5:
+        leftx, lefty, rightx, righty, out_img = find_lane_around_fit(warped)
+        left_lane.fit_method = "Around fit"
+        right_lane.fit_method = "Around fit"
+        fit_and_update(leftx, lefty, rightx, righty, warped.shape[0])
+    # if we already skipped some frames (or at the beginning, as we initialize frames to a high value)
+    # then do boxes method
+    else:
+        leftx, lefty, rightx, righty, out_img = find_lane_pixels(warped)
+        left_lane.fit_method = "Boxes"
+        right_lane.fit_method = "Boxes"
+        fit_and_update(leftx, lefty, rightx, righty, warped.shape[0])
+    # out_img = fit_polynomial(warped)
     # Plot polynomial result
     # plot_img(out_img)
 
@@ -454,7 +362,7 @@ def pipeline(img):
 
 
 clip_name = "project_video"
-clip1 = VideoFileClip(clip_name + ".mp4")#.subclip(0, 6)
+clip1 = VideoFileClip(clip_name + ".mp4").subclip(0, 4)
 
 left_lane = Line()
 right_lane = Line()
