@@ -108,13 +108,13 @@ def fit_polynomial(binary_warped):
     out_img[lefty, leftx] = [255, 0, 0]
     out_img[righty, rightx] = [0, 0, 255]
     # Plots the left and right polynomials on the lane lines
-    # plt.plot(left_fitx, ploty, color='yellow')
-    # plt.plot(right_fitx, ploty, color='yellow')
+    plt.plot(left_fitx, ploty, color='yellow')
+    plt.plot(right_fitx, ploty, color='yellow')
 
     return out_img, left_fit_cf, right_fit_cf, left_fitx, right_fitx, ploty
 
 
-def calculate_curvature(left_fit_cf, right_fit_cf, ploty):
+def find_curvature(left_fit_cf, right_fit_cf, ploty):
     # Calculate curvature of fits
     # Define conversions in x and y from pixels space to meters
     ym_per_pix = 30/720 # meters per pixel in y dimension
@@ -139,7 +139,8 @@ except (OSError, IOError):  # No progress file yet available
     print("No saved distorsion data. Run camera_calibration.py")
 
 # Get one image
-img_name = " - No same curvature_2.jpg"
+img_name = " - No same curvature_1.jpg"
+# img_name = "test_images/straight_lines1.jpg"
 img = mpimg.imread(img_name)
 
 # 1. Correct distorsion
@@ -155,7 +156,7 @@ hls_binary = hls_select(img, thresh=(90, 255))
 combined = np.zeros_like(dir_binary)
 combined[(gradx == 1 | ((mag_binary == 1) & (dir_binary == 1))) | hls_binary == 1] = 1
 # Plot the thresholding step
-plot_thresholds(undist, gradx, grady, mag_binary, dir_binary, hls_binary, combined)
+# plot_thresholds(undist, gradx, grady, mag_binary, dir_binary, hls_binary, combined)
 
 # 3. Define trapezoid points on the road and transform perspective
 X = combined.shape[1]
@@ -163,8 +164,8 @@ Y = combined.shape[0]
 src = np.float32(
         [[200, 720],
          [1100, 720],
-         [685, 450],
-         [595, 450]])
+         [700, 460],
+         [580, 460]])
 dst = np.float32(
         [[300, 720],
          [980, 720],
@@ -176,18 +177,19 @@ Minv = cv2.getPerspectiveTransform(dst, src)
 # Warp the result of binary thresholds
 warped = cv2.warpPerspective(combined, M, (X,Y), flags=cv2.INTER_LINEAR)
 # Plot warping step
-# plot_warping(combined, warped)
+plot_warping(combined, warped, src)
 
 # 4. Get polinomial fit of lines
 out_img, left_fit_cf, right_fit_cf,  left_fitx, right_fitx, ploty = fit_polynomial(warped)
 # Plot polynomial result
-plot_img(out_img)
 
+print("X pixels: ", out_img.shape[1])
+print("Y pixels: ", out_img.shape[0])
 # 5. Calcutale curvature
-curv_left, curv_right = calculate_curvature(left_fit_cf, right_fit_cf, ploty)
+curv_left, curv_right = find_curvature(left_fit_cf, right_fit_cf, ploty)
 print("Curvature left: ", curv_left)
 print("Curvature right: ", curv_right)
-
+plot_img(out_img)
 # 6. Plot fitted lanes into original image
 # Create an image to draw the lines on
 warp_zero = np.zeros_like(warped).astype(np.uint8)

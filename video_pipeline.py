@@ -248,8 +248,8 @@ def pipeline(img):
     src = np.float32(
             [[200, 720],
              [1100, 720],
-             [685, 450],
-             [595, 450]])
+             [700, 460],
+             [580, 460]])
     dst = np.float32(
             [[300, 720],
              [980, 720],
@@ -304,7 +304,7 @@ def pipeline(img):
     result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
 
     # if error save original img to check closely in image pipeline
-    if left_lane.skip_frames == 1:
+    if left_lane.skip_frames == 0 and left_lane.err_msg != "":
         mpimg.imsave(left_lane.err_msg + "_" + str(error_im) + ".jpg", img)
         error_im += 1
 
@@ -330,7 +330,7 @@ def pipeline(img):
 
 
 clip_name = "project_video"
-clip1 = VideoFileClip(clip_name + ".mp4").subclip(0, 4)
+clip1 = VideoFileClip(clip_name + ".mp4")#.subclip(0, 14)
 
 left_lane = Line()
 right_lane = Line()
