@@ -49,3 +49,20 @@ def hls_select(img, thresh=(0, 255)):
     # 3) Return a binary image of threshold result
     # binary_output = np.copy(img) # placeholder line
     return binary_output
+
+def white_select(img, thresh=200):
+    binary_output = np.zeros_like(img[:, :, 0])
+    binary_output[(img[:,:,0] > thresh) & (img[:,:,1] > thresh) & (img[:,:,2] > thresh)] = 1
+    # 3) Return a binary image of threshold result
+    # binary_output = np.copy(img) # placeholder line
+    return binary_output
+
+
+def yellow_select(img, thresh=(0, 255)):
+    rg_th = 135
+    bl_th = 115
+    binary_output = np.zeros_like(img[:, :, 0])
+    binary_output[(img[:,:,0] > rg_th) & (img[:,:,1] > rg_th) & (img[:,:,2] < bl_th)] = 1
+    # 3) Return a binary image of threshold result
+    # binary_output = np.copy(img) # placeholder line
+    return binary_output

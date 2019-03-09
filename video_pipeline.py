@@ -13,24 +13,23 @@ class Line():
     def __init__(self):
         # was the line detected in the last iteration?
         self.detected = False
+        # number of frames to keep in history
+        self.nframes = 6
         # x values of the last n fits of the line
-        self.recent_xfitted = []
-        # average x values of the fitted line over the last n iterations
-        self.bestx = None
-        # polynomial coefficients averaged over the last n iterations
-        self.best_fit = None
-        # polynomial coefficients for the most recent fit
-        self.current_fit = [np.array([False])]
+        self.fit_x = None
+        self.fit_x_hist = []
+        # y values for detected line pixels
+        self.fit_y = None
+        # polynomial coefficients averaged over the last n iterationss
+        self.fit_hist = []
+        self.fit_avg = None
         # radius of curvature of the line in some units
-        self.curv = None
+        self.curv_avg = None
+        self.curv_hist = []
         # distance in meters of vehicle center from the line
         self.base_pos = None
         # difference in fit coefficients between last and new fits
         self.diffs = np.array([0,0,0], dtype='float')
-        # x values for detected line pixels
-        self.allx = None
-        # y values for detected line pixels
-        self.ally = None
         # fitting method
         self.fit_method = ""
         # frames without updating
@@ -39,11 +38,21 @@ class Line():
 
     def update(self, y, fit, x, curv):
         self.detected = True
-        self.current_fit = fit
-        self.allx = x
-        self.ally = y
-        self.curv = curv
-        self.base_pos = self.allx[len(self.ally)-1]
+
+        self.fit_y = y
+        if len(self.fit_x_hist) >= self.nframes:
+            self.fit_x_hist.pop(0)
+            self.fit_hist.pop(0)
+            self.curv_hist.pop(0)
+        self.fit_x_hist.append(x)
+        self.fit_hist.append(fit)
+        self.curv_hist.append(curv)
+
+        self.fit_x = np.mean(self.fit_x_hist, axis=0)
+        self.fit_avg = np.mean(self.fit_hist, axis=0)
+        self.curv_avg = np.mean(self.curv_hist)
+
+        self.base_pos = self.fit_x[len(self.fit_y)-1]
 
 
 # Functions for polynomial fitting step
@@ -60,7 +69,7 @@ def find_lane_pixels(binary_warped):
 
     # HYPERPARAMETERS
     nwindows = 9        # Choose the number of sliding windows
-    margin = 100        # Set the width of the windows +/- margin
+    margin = 130        # Set the width of the windows +/- margin
     minpix = 50         # Set minimum number of pixels found to recenter window
 
     # Set height of windows - based on nwindows above and image shape
@@ -134,9 +143,9 @@ def find_lane_around_fit(binary_warped):
     nonzeroy = np.array(nonzero[0])
     nonzerox = np.array(nonzero[1])
 
-    x_left = [left_lane.current_fit[0] * y ** 2 + left_lane.current_fit[1] * y + left_lane.current_fit[2]
+    x_left = [left_lane.fit_avg[0] * y ** 2 + left_lane.fit_avg[1] * y + left_lane.fit_avg[2]
               for y in range(binary_warped.shape[0])]
-    x_right = [right_lane.current_fit[0] * y ** 2 + right_lane.current_fit[1] * y + right_lane.current_fit[2]
+    x_right = [right_lane.fit_avg[0] * y ** 2 + right_lane.fit_avg[1] * y + right_lane.fit_avg[2]
                for y in range(binary_warped.shape[0])]
 
     left_lane_inds = [i for i in range(len(nonzerox)) if
@@ -162,13 +171,13 @@ def sanity_chk(ploty, left_fit_cf, right_fit_cf, left_px, right_px, left_curv, r
         err = "No right lane distance"
     lane_dist = right_px - left_px
     lane_delta = lane_dist - np.mean(lane_dist)
-    if np.max(lane_delta) > np.mean(lane_dist) / 10:    # Are lanes more or less parallel?
+    if np.max(lane_delta) > np.mean(lane_dist) / 7:    # Are lanes more or less parallel?
         sane = False
         err = err + " - " + "No parallel lanes"
-    if left_curv < 2000 or right_curv < 2000:           # Is the curvature similar?
-        if abs(left_curv - right_curv) > 200:
-            sane = False
-            err = err + " - " + "No same curvature"
+    # if left_curv < 1800 or right_curv < 1800:           # Is the curvature similar?
+    #     if abs(left_curv - right_curv) > 500:
+    #         sane = False
+    #         err = err + " - " + "No same curvature"
     return sane, err
 
 
@@ -232,24 +241,23 @@ def pipeline(img):
 
     # 2. Apply filters to get binary map
     ksize = 3
-    gradx = abs_sobel_thresh(undist, orient='x', sobel_kernel=ksize, thresh=(20, 200))
-    grady = abs_sobel_thresh(undist, orient='y', sobel_kernel=ksize, thresh=(20, 100))
+    gradx = abs_sobel_thresh(undist, orient='x', sobel_kernel=ksize, thresh=(15, 100))
+    grady = abs_sobel_thresh(undist, orient='y', sobel_kernel=ksize, thresh=(15, 100))
     mag_binary = mag_thresh(undist, sobel_kernel=ksize, mag_thresh=(20, 100))
-    dir_binary = dir_threshold(undist, sobel_kernel=15, thresh=(0.9, 1.1))
+    dir_binary = dir_threshold(undist, sobel_kernel=15, thresh=(0.9, 1.2))
     hls_binary = hls_select(img, thresh=(90, 255))
     combined = np.zeros_like(dir_binary)
-    combined[(gradx == 1 | ((mag_binary == 1) & (dir_binary == 1))) | hls_binary == 1] = 1
-    # Plot the thresholding step
-    # plot_thresholds(undist, gradx, grady, mag_binary, dir_binary, hls_binary, combined)
+
+    combined[((gradx == 1) & (grady == 1) & (dir_binary == 1)) | (hls_binary == 1)] = 1
 
     # 3. Define trapezoid points on the road and transform perspective
     X = combined.shape[1]
     Y = combined.shape[0]
     src = np.float32(
-            [[200, 720],
-             [1100, 720],
-             [700, 460],
-             [580, 460]])
+            [[212, 720],
+             [1068, 720],
+             [700, 455],
+             [580, 455]])
     dst = np.float32(
             [[300, 720],
              [980, 720],
@@ -260,8 +268,6 @@ def pipeline(img):
     Minv = cv2.getPerspectiveTransform(dst, src)
     # Warp the result of binary thresholds
     warped = cv2.warpPerspective(combined, M, (X,Y), flags=cv2.INTER_LINEAR)
-    # Plot warping step
-    # plot_warping(combined, warped)
 
     # 4. Get polinomial fit of lines
     # If lanes were detected on previous frame search for new lane around that location
@@ -278,8 +284,6 @@ def pipeline(img):
         right_lane.fit_method = "Boxes"
         fit_and_update(leftx, lefty, rightx, righty, warped.shape[0])
     # out_img = fit_polynomial(warped)
-    # Plot polynomial result
-    # plot_img(out_img)
 
     # 5. Calcutale curvature and distance to center
     lane_w, offset = lane_offset(img.shape[1])
@@ -290,8 +294,8 @@ def pipeline(img):
     color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
 
     # Recast the x and y points into usable format for cv2.fillPoly()
-    pts_left = np.array([np.transpose(np.vstack([left_lane.allx, left_lane.ally]))])
-    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_lane.allx, right_lane.ally])))])
+    pts_left = np.array([np.transpose(np.vstack([left_lane.fit_x, left_lane.fit_y]))])
+    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_lane.fit_x, right_lane.fit_y])))])
     pts = np.hstack((pts_left, pts_right))
 
     # Draw the lane onto the warped blank image
@@ -309,13 +313,19 @@ def pipeline(img):
         error_im += 1
 
     # Add text
-    curv_left_txt = str(int(left_lane.curv))
-    curv_right_txt = str(int(right_lane.curv))
+    if left_lane.curv_avg > 2000:
+        curv_left_txt = "straight"
+    else:
+        curv_left_txt = str(int(left_lane.curv_avg)) + "m"
+    if right_lane.curv_avg > 2000:
+        curv_right_txt = "straight"
+    else:
+        curv_right_txt = str(int(right_lane.curv_avg)) + "m"
     lane_width_txt = "%.2f" % lane_w
     lane_off_txt = "%.2f" % offset
-    cv2.putText(result, "Curvature left lane: " + curv_left_txt + "m",
+    cv2.putText(result, "Curvature left lane: " + curv_left_txt,
                 (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
-    cv2.putText(result, "Curvature right lane: " + curv_right_txt + "m",
+    cv2.putText(result, "Curvature right lane: " + curv_right_txt,
                 (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
     cv2.putText(result, "Lane width: " + lane_width_txt + "m",
                 (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
@@ -330,7 +340,7 @@ def pipeline(img):
 
 
 clip_name = "project_video"
-clip1 = VideoFileClip(clip_name + ".mp4")#.subclip(0, 14)
+clip1 = VideoFileClip(clip_name + ".mp4")#.subclip(0, 8)
 
 left_lane = Line()
 right_lane = Line()

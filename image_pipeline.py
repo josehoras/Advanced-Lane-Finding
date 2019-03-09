@@ -21,7 +21,7 @@ def find_lane_pixels(binary_warped):
 
     # HYPERPARAMETERS
     nwindows = 9        # Choose the number of sliding windows
-    margin = 100        # Set the width of the windows +/- margin
+    margin = 130        # Set the width of the windows +/- margin
     minpix = 50         # Set minimum number of pixels found to recenter window
 
     # Set height of windows - based on nwindows above and image shape
@@ -139,33 +139,39 @@ except (OSError, IOError):  # No progress file yet available
     print("No saved distorsion data. Run camera_calibration.py")
 
 # Get one image
-img_name = " - No same curvature_1.jpg"
-# img_name = "test_images/straight_lines1.jpg"
+img_name = " - No same curvature_24.jpg"
+# img_name = "test_images/straight_lines2.jpg"
 img = mpimg.imread(img_name)
-
+print(img.shape)
 # 1. Correct distorsion
 undist = cv2.undistort(img, mtx, dist, None, mtx)
 
 # 2. Apply filters to get binary map
 ksize = 3
-gradx = abs_sobel_thresh(undist, orient='x', sobel_kernel=ksize, thresh=(20, 200))
+gradx = abs_sobel_thresh(undist, orient='x', sobel_kernel=ksize, thresh=(20, 100))
 grady = abs_sobel_thresh(undist, orient='y', sobel_kernel=ksize, thresh=(20, 100))
 mag_binary = mag_thresh(undist, sobel_kernel=ksize, mag_thresh=(20, 100))
-dir_binary = dir_threshold(undist, sobel_kernel=15, thresh=(0.9, 1.1))
+dir_binary = dir_threshold(undist, sobel_kernel=15, thresh=(0.9, 1.2))
 hls_binary = hls_select(img, thresh=(90, 255))
+white_binary = white_select(img, thresh=200)
+yellow_binary = yellow_select(img)
 combined = np.zeros_like(dir_binary)
-combined[(gradx == 1 | ((mag_binary == 1) & (dir_binary == 1))) | hls_binary == 1] = 1
+
+combined[((gradx == 1) & (grady == 1) & (dir_binary == 1)) | (hls_binary == 1)] = 1
+
 # Plot the thresholding step
-# plot_thresholds(undist, gradx, grady, mag_binary, dir_binary, hls_binary, combined)
+plot_thresholds(undist, gradx, grady,
+                white_binary, dir_binary, hls_binary,
+                ((gradx == 1) & (grady == 1) & (dir_binary == 1)), combined,  (hls_binary == 1))
 
 # 3. Define trapezoid points on the road and transform perspective
 X = combined.shape[1]
 Y = combined.shape[0]
 src = np.float32(
-        [[200, 720],
-         [1100, 720],
-         [700, 460],
-         [580, 460]])
+        [[212, 720],
+         [1068, 720],
+         [700, 455],
+         [580, 455]])
 dst = np.float32(
         [[300, 720],
          [980, 720],
@@ -187,8 +193,11 @@ print("X pixels: ", out_img.shape[1])
 print("Y pixels: ", out_img.shape[0])
 # 5. Calcutale curvature
 curv_left, curv_right = find_curvature(left_fit_cf, right_fit_cf, ploty)
+print("base dist:  ", right_fitx[len(ploty)-1] - left_fitx[len(ploty)-1])
+print("upper dist: ", right_fitx[0] - left_fitx[0])
 print("Curvature left: ", curv_left)
 print("Curvature right: ", curv_right)
+
 plot_img(out_img)
 # 6. Plot fitted lanes into original image
 # Create an image to draw the lines on
