@@ -120,24 +120,29 @@ def pipeline(img):
         # find pixels
         leftx, lefty, rightx, righty, out_img = find_lane_pixels(warped)
         # fit polynomials
-        left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, warped.shape[0])
-        # sanity check
-        ok, err_msg = sanity_chk(ploty, left_px, right_px)
+        try:
+            left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, warped.shape[0])
+            ok, err_msg = sanity_chk(ploty, left_px, right_px)
+        except:
+            ok, err_msg = False, "Empty data"
         if ok:
             skipped_frames = 0
         else:
             skipped_frames += 1
-        left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
-        left_lane.update(ploty, left_fit, left_px, left_curv)
-        right_lane.update(ploty, right_fit, right_px, right_curv)
+        if err_msg != "Empty data":
+            left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
+            left_lane.update(ploty, left_fit, left_px, left_curv)
+            right_lane.update(ploty, right_fit, right_px, right_curv)
     else:           # If lanes were detected on previous frame search for new lane around that location
         fit_method = "Around fit"
         # find pixels
         leftx, lefty, rightx, righty, out_img = find_lane_around_fit(warped, left_lane.fit_x, right_lane.fit_x)
         # fit polynomials
-        left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, warped.shape[0])
-        # sanity check
-        ok, err_msg = sanity_chk(ploty, left_px, right_px)
+        try:
+            left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, warped.shape[0])
+            ok, err_msg = sanity_chk(ploty, left_px, right_px)
+        except:
+            ok, err_msg = False, "Empty data"
         if ok:
             skipped_frames = 0
             left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
