@@ -1,9 +1,9 @@
 import numpy as np
+import pickle
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from moviepy.editor import VideoFileClip
-import pickle
 from image_thresholding import *
 from plotting_helpers import *
 from line_fit import *
@@ -14,15 +14,15 @@ from Line import *
 def pipeline(img):
     global error_im, skipped_frames
 
-    # Open distorsion matrix
+    # 1. Correct distorsion
+    # open distorsion matrix
     try:
         saved_dist = pickle.load(open('calibrate_camera.p', 'rb'), encoding='latin1')
         mtx = saved_dist['mtx']
         dist = saved_dist['dist']
     except (OSError, IOError):  # No progress file yet available
         print("No saved distorsion data. Run camera_calibration.py")
-
-    # 1. Correct distorsion
+    # apply correction
     undist = cv2.undistort(img, mtx, dist, None, mtx)
 
     # 2. Apply filters to get binary map
@@ -32,9 +32,9 @@ def pipeline(img):
     mag_bin = mag_thresh(undist, sobel_kernel=ksize, mag_thresh=(10, 200))
     dir_bin = dir_threshold(undist, sobel_kernel=15, thresh=(0.9, 1.2))
     hls_bin = hls_select(img, thresh=(50, 255))
-    white_bin = white_select(img, thresh=188)
+    white_bin = white_select(img, thresh=195)
     yellow_bin = yellow_select(img)
-
+    # combine filters to a final output
     combined = np.zeros_like(dir_bin)
     combined[((mag_bin == 1) & (dir_bin == 1) & (hls_bin == 1)) |
              ((white_bin == 1) | (yellow_bin == 1))] = 1
@@ -52,10 +52,10 @@ def pipeline(img):
              [980, 720],
              [980, 0],
              [300, 0]])
-    # Get perspective transformation matrix
+    # get perspective transformation matrix
     M = cv2.getPerspectiveTransform(src, dst)
     Minv = cv2.getPerspectiveTransform(dst, src)
-    # Warp the result of binary thresholds
+    # warp the result of binary thresholds
     warped = cv2.warpPerspective(combined, M, (X,Y), flags=cv2.INTER_LINEAR)
 
     # 4. Get polinomial fit of lines
@@ -63,7 +63,7 @@ def pipeline(img):
     if skipped_frames > 5:
         fit_method = "Boxes"
         leftx, lefty, rightx, righty, out_img = find_lane_pixels(warped)
-    else:           # If lanes were detected on previous frame search for new lane around that location
+    else:
         fit_method = "Around fit"
         leftx, lefty, rightx, righty, out_img = find_lane_around_fit(warped, left_lane.fit_x, right_lane.fit_x)
 
