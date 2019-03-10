@@ -155,3 +155,13 @@ def sanity_chk(ploty, left_px, right_px):
     #         sane = False
     #         err = err + " - " + "No same curvature"
     return sane, err
+
+def find_curv(ally, left_fit, right_fit):
+    ym_per_pix = 30 / 720       # meters per pixel in y dimension
+    xm_per_pix = 3.7 / 700      # meters per pixel in x dimension
+    ally_m = ally * ym_per_pix
+    def curv(fit):
+        a = (xm_per_pix / ym_per_pix ** 2) * fit[0]
+        b = (xm_per_pix / ym_per_pix) * fit[1]
+        return np.mean(((1 + (2 * a * ally_m + b) ** 2) ** (3 / 2)) / abs(2 * a))
+    return curv(left_fit), curv(right_fit)

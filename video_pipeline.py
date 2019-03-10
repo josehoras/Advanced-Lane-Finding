@@ -7,67 +7,12 @@ import pickle
 from image_thresholding import *
 from plotting_helpers import *
 from line_fit import *
-
-# Class Line
-# Define a class to receive the characteristics of each line detection
-class Line():
-    def __init__(self):
-        # number of frames to keep in history
-        self.nframes = 4
-        # x values of the last n fits of the line
-        self.fit_x = None
-        self.fit_x_hist = []
-        # y values for detected line pixels
-        self.fit_y = None
-        # polynomial coefficients averaged over the last n iterationss
-        self.fit_hist = []
-        self.fit_avg = None
-        # radius of curvature of the line in some units
-        self.curv_avg = None
-        self.curv_hist = []
-        # distance in meters of vehicle center from the line
-        self.base_pos = None
-        # difference in fit coefficients between last and new fits
-        self.diffs = np.array([0,0,0], dtype='float')
-
-    def update(self, y, fit, x, curv):
-        self.fit_y = y
-        if len(self.fit_x_hist) >= self.nframes:
-            self.fit_x_hist.pop(0)
-            self.fit_hist.pop(0)
-            self.curv_hist.pop(0)
-        self.fit_x_hist.append(x)
-        self.fit_hist.append(fit)
-        self.curv_hist.append(curv)
-
-        self.fit_x = np.mean(self.fit_x_hist, axis=0)
-        self.fit_avg = np.mean(self.fit_hist, axis=0)
-        self.curv_avg = np.mean(self.curv_hist)
-
-        self.base_pos = self.fit_x[len(self.fit_y)-1]
-
-
-def find_curv(ally, left_fit, right_fit):
-    ym_per_pix = 30 / 720       # meters per pixel in y dimension
-    xm_per_pix = 3.7 / 700      # meters per pixel in x dimension
-    ally_m = ally * ym_per_pix
-    def curv(fit):
-        a = (xm_per_pix / ym_per_pix ** 2) * fit[0]
-        b = (xm_per_pix / ym_per_pix) * fit[1]
-        return np.mean(((1 + (2 * a * ally_m + b) ** 2) ** (3 / 2)) / abs(2 * a))
-    return curv(left_fit), curv(right_fit)
-
-
-def lane_offset(screen_size):
-    xm_per_pix = 3.7/700 # meters per pixel in x dimension
-    lane_w = (right_lane.base_pos - left_lane.base_pos) * xm_per_pix
-    offset = (((right_lane.base_pos + left_lane.base_pos) - screen_size) / 2) * xm_per_pix
-    return lane_w, offset
+from Line import *
 
 
 # *** PIPELINE ***
 def pipeline(img):
-    global error_im, skipped_frames, fit_method
+    global error_im, skipped_frames
 
     # Open distorsion matrix
     try:
@@ -89,8 +34,8 @@ def pipeline(img):
     hls_bin = hls_select(img, thresh=(50, 255))
     white_bin = white_select(img, thresh=188)
     yellow_bin = yellow_select(img)
-    combined = np.zeros_like(dir_bin)
 
+    combined = np.zeros_like(dir_bin)
     combined[((mag_bin == 1) & (dir_bin == 1) & (hls_bin == 1)) |
              ((white_bin == 1) | (yellow_bin == 1))] = 1
 
@@ -115,14 +60,14 @@ def pipeline(img):
 
     # 4. Get polinomial fit of lines
     # if > 4 frames skipped (or first frame, as skipped_frames is initialized to 100) do full search
-    if skipped_frames > 7:
+    if skipped_frames > 5:
         fit_method = "Boxes"
         leftx, lefty, rightx, righty, out_img = find_lane_pixels(warped)
     else:           # If lanes were detected on previous frame search for new lane around that location
         fit_method = "Around fit"
         leftx, lefty, rightx, righty, out_img = find_lane_around_fit(warped, left_lane.fit_x, right_lane.fit_x)
 
-    # fit polynomials
+    # fit polynomials and sanity check
     try:
         left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, warped.shape[0])
         detected, err_msg = sanity_chk(ploty, left_px, right_px)
@@ -132,13 +77,13 @@ def pipeline(img):
     if detected: skipped_frames = 0
     else:        skipped_frames += 1
 
+    # 5. Calculate distance to center, curvature, and update Line objects
     if detected or (fit_method == "Boxes" and err_msg != "Empty data"):
         left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
         left_lane.update(ploty, left_fit, left_px, left_curv)
         right_lane.update(ploty, right_fit, right_px, right_curv)
-
-    # 5. Calcutale curvature and distance to center
-    lane_w, offset = lane_offset(img.shape[1])
+    lane_w = (right_lane.base_pos - left_lane.base_pos) * 3.7/700
+    offset = (((right_lane.base_pos + left_lane.base_pos) - img.shape[1]) / 2) * 3.7/700
 
     # 6. Plot fitted lanes into original image
     # Create an image to draw the lines on
@@ -165,44 +110,41 @@ def pipeline(img):
         error_im += 1
 
     # Add text
-    if left_lane.curv_avg > 2000:
-        curv_left_txt = "straight"
+    road_curv = (left_lane.curv_avg + right_lane.curv_avg) // 2
+    if road_curv > 2000:
+        road_curv_text = "Road curvature: straight"
     else:
-        curv_left_txt = str(int(left_lane.curv_avg)) + "m"
-    if right_lane.curv_avg > 2000:
-        curv_right_txt = "straight"
-    else:
-        curv_right_txt = str(int(right_lane.curv_avg)) + "m"
-    lane_width_txt = "%.2f" % lane_w
-    lane_off_txt = "%.2f" % offset
-    cv2.putText(result, "Curvature left lane: " + curv_left_txt,
-                (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
-    cv2.putText(result, "Curvature right lane: " + curv_right_txt,
-                (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
-    cv2.putText(result, "Skipped frames: " + str(skipped_frames),
-                (520,50), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
-    cv2.putText(result, "Curvature right lane: " + curv_right_txt,
-                (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
-    cv2.putText(result, "Lane width: " + lane_width_txt + "m",
-                (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
-    cv2.putText(result, "Offset: " + lane_off_txt + "m",
-                (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
-    cv2.putText(result, fit_method,
-                (50, 250), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+        road_curv_text = "Road curvature: " + str(road_curv) + "m"
+    lane_width_txt = "Lane width: %.2f m" % lane_w
+    lane_off_txt = "Offset: %.2f m" % offset
+
+    for i, txt in enumerate([road_curv_text, lane_width_txt, lane_off_txt]):
+        cv2.putText(result, txt, (50, 50 * (i+1)), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
+
+    # Umcomment for debugging messages
+    for i, obj, txt in [(1, left_lane, "Left"), (2, right_lane, "Right")]:
+        if obj.curv_avg > 2000:
+            curv_txt = txt + " curvature: straight"
+        else:
+            curv_txt = txt + " curvature: " + str(int(obj.curv_avg)) + "m"
+        cv2.putText(result,curv_txt, (550, 50 * i), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
+    cv2.putText(result, "Skipped frames: " + str(skipped_frames), (550,150), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
+    cv2.putText(result, fit_method, (550, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
     if err_msg != "":
-        cv2.putText(result, "Error!: " + err_msg,
-                    (50, 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+        cv2.putText(result, "Error!: " + err_msg, (550, 250), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
+
     return result
 
 
-clip_name = "harder_challenge_video"
-clip1 = VideoFileClip(clip_name + ".mp4")#.subclip(0, 8)
-
+# *** MAIN ***
+# define global variables to use in the pipeline
 left_lane = Line()
 right_lane = Line()
 error_im = 1
 skipped_frames = 100
-fit_method = ""
-
+# load video
+clip_name = "challenge_video"
+clip1 = VideoFileClip(clip_name + ".mp4")#.subclip(0, 8)
+# run video through the pipeline and save output
 out_clip = clip1.fl_image(pipeline)
 out_clip.write_videofile(clip_name + "_output.mp4", audio=False)
