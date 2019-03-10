@@ -106,23 +106,33 @@ def find_lane_around_fit(binary_warped, x_left, x_right):
 def fit_polynomial(binary_warped, plot=True):
     # Find our lane pixels first
     leftx, lefty, rightx, righty, out_img = find_lane_pixels(binary_warped)
-    # Fit a second order polynomial to each using `np.polyfit`
-    left_fit_cf = np.polyfit(lefty, leftx, 2)
-    right_fit_cf = np.polyfit(righty, rightx, 2)
-    # Generate x and y values for plotting
-    ploty = np.linspace(0, binary_warped.shape[0] - 1, binary_warped.shape[0])
-    left_fitx = left_fit_cf[0] * ploty ** 2 + left_fit_cf[1] * ploty + left_fit_cf[2]
-    right_fitx = right_fit_cf[0] * ploty ** 2 + right_fit_cf[1] * ploty + right_fit_cf[2]
+    # fit if leftx, rightx are not empty
+    left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, out_img.shape[0])
 
     # Visualization
     out_img[lefty, leftx] = [255, 0, 0]
     out_img[righty, rightx] = [0, 0, 255]
     # Plots the left and right polynomials on the lane lines
     if plot:
-        plt.plot(left_fitx, ploty, color='yellow')
-        plt.plot(right_fitx, ploty, color='yellow')
+        plt.plot(left_px, ploty, color='yellow')
+        plt.plot(right_px, ploty, color='yellow')
 
-    return out_img, left_fit_cf, right_fit_cf, left_fitx, right_fitx, ploty
+    return out_img, left_fit, right_fit, left_px, right_px, ploty
+
+
+def fit(leftx, lefty, rightx, righty, y_px):
+    if len(leftx) > 0 and len(rightx) > 0:
+        # Fit a second order polynomial to each using `np.polyfit`
+        left_fit = np.polyfit(lefty, leftx, 2)
+        right_fit = np.polyfit(righty, rightx, 2)
+        # Generate x and y values for plotting
+        ploty = np.linspace(0, y_px - 1, y_px)
+        left_px = left_fit[0] * ploty ** 2 + left_fit[1] * ploty + left_fit[2]
+        right_px = right_fit[0] * ploty ** 2 + right_fit[1] * ploty + right_fit[2]
+        return left_fit, right_fit, left_px, right_px, ploty
+    else:
+        print("Empty data!")
+        return
 
 
 def fit_and_update(leftx, lefty, rightx, righty, y_px):
@@ -131,17 +141,12 @@ def fit_and_update(leftx, lefty, rightx, righty, y_px):
         right_lane.detected = False
         left_lane.skip_frames += 1
         return
-    # Fit a second order polynomial to each using `np.polyfit`
-    left_fit = np.polyfit(lefty, leftx, 2)
-    right_fit = np.polyfit(righty, rightx, 2)
-    # Generate x and y values for plotting
-    ploty = np.linspace(0, y_px - 1, y_px)
-    left_px = left_fit[0] * ploty ** 2 + left_fit[1] * ploty + left_fit[2]
-    right_px = right_fit[0] * ploty ** 2 + right_fit[1] * ploty + right_fit[2]
+    # Fit
+    left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, y_px)
     # calculate curvature
-    left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
+    # left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
     # perform sanity check on new lines
-    sane, err = sanity_chk(ploty, left_fit, right_fit, left_px, right_px, left_curv, right_curv)
+    sane, err = sanity_chk(ploty, left_px, right_px)
     # if fine, we update the lanes values with this last fit
     if sane or left_lane.fit_method == "Boxes":
         left_lane.update(ploty, left_fit, left_px, left_curv)
@@ -156,19 +161,21 @@ def fit_and_update(leftx, lefty, rightx, righty, y_px):
         left_lane.err_msg = err
 
 
-def sanity_chk(ploty, left_fit_cf, right_fit_cf, left_px, right_px, left_curv, right_curv):
-    xm_per_pix = 3.7/700        # meters per pixel in x dimension
+def sanity_chk(ploty, left_px, right_px):
     sane = True
     err = ""
-    width = (right_px[len(ploty)-1] - left_px[len(ploty)-1]) * xm_per_pix
+    width = (right_px[-1] - left_px[-1]) * 3.7/700
     if width > 4.2 or width < 3.2:                      # Is lane width around 3.7m (+/- 0.5)?
         sane = False
         err = "No right lane distance"
-    lane_dist = right_px[len(ploty)//2:] - left_px[len(ploty)//2:]
-    lane_delta = lane_dist - np.mean(lane_dist)
-    if np.max(lane_delta) > np.mean(lane_dist) / 5:    # Are lanes more or less parallel?
+    farther = len(ploty)//2
+    lane_dist = right_px[farther:] - left_px[farther:]
+    sigma = np.max(lane_dist) / np.min(lane_dist)
+    # print("max: {0:.3f} - min: {1:.3f}".format(np.max(lane_dist), np.min(lane_dist)))
+    if sigma > 1.5:    # Are lanes more or less parallel?
         sane = False
-        err = err + " - " + "No parallel lanes"
+        sg = "{0:.1f}".format(sigma)
+        err = err + " - " + "No parallel lanes (" + sg + ")"
     # if left_curv < 1800 or right_curv < 1800:           # Is the curvature similar?
     #     if abs(left_curv - right_curv) > 500:
     #         sane = False

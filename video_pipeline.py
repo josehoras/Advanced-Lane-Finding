@@ -12,8 +12,6 @@ from line_fit import *
 # Define a class to receive the characteristics of each line detection
 class Line():
     def __init__(self):
-        # was the line detected in the last iteration?
-        self.detected = False
         # number of frames to keep in history
         self.nframes = 4
         # x values of the last n fits of the line
@@ -31,15 +29,8 @@ class Line():
         self.base_pos = None
         # difference in fit coefficients between last and new fits
         self.diffs = np.array([0,0,0], dtype='float')
-        # fitting method
-        self.fit_method = ""
-        # frames without updating
-        self.skip_frames = 50
-        self.err_msg = ""
 
     def update(self, y, fit, x, curv):
-        self.detected = True
-
         self.fit_y = y
         if len(self.fit_x_hist) >= self.nframes:
             self.fit_x_hist.pop(0)
@@ -76,7 +67,7 @@ def lane_offset(screen_size):
 
 # *** PIPELINE ***
 def pipeline(img):
-    global error_im, skipped_frames
+    global error_im, skipped_frames, fit_method
 
     # Open distorsion matrix
     try:
@@ -125,16 +116,35 @@ def pipeline(img):
     # 4. Get polinomial fit of lines
     # if > 4 frames skipped (or first frame, as skipped_frames is initialized to 100) do full search
     if skipped_frames > 4:
+        fit_method = "Boxes"
+        # find pixels
         leftx, lefty, rightx, righty, out_img = find_lane_pixels(warped)
-        left_lane.fit_method = "Boxes"
-        right_lane.fit_method = "Boxes"
-        fit_and_update(leftx, lefty, rightx, righty, warped.shape[0])
+        # fit polynomials
+        left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, warped.shape[0])
+        # sanity check
+        ok, err_msg = sanity_chk(ploty, left_px, right_px)
+        if ok:
+            skipped_frames = 0
+        else:
+            skipped_frames += 1
+        left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
+        left_lane.update(ploty, left_fit, left_px, left_curv)
+        right_lane.update(ploty, right_fit, right_px, right_curv)
     else:           # If lanes were detected on previous frame search for new lane around that location
+        fit_method = "Around fit"
+        # find pixels
         leftx, lefty, rightx, righty, out_img = find_lane_around_fit(warped, left_lane.fit_x, right_lane.fit_x)
-        left_lane.fit_method = "Around fit"
-        right_lane.fit_method = "Around fit"
-        fit_and_update(leftx, lefty, rightx, righty, warped.shape[0])
-
+        # fit polynomials
+        left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, warped.shape[0])
+        # sanity check
+        ok, err_msg = sanity_chk(ploty, left_px, right_px)
+        if ok:
+            skipped_frames = 0
+            left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
+            left_lane.update(ploty, left_fit, left_px, left_curv)
+            right_lane.update(ploty, right_fit, right_px, right_curv)
+        else:
+            skipped_frames += 1
 
     # 5. Calcutale curvature and distance to center
     lane_w, offset = lane_offset(img.shape[1])
@@ -159,8 +169,8 @@ def pipeline(img):
     result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
 
     # if error save original img to check closely in image pipeline
-    if 1 < left_lane.skip_frames < 3:
-        mpimg.imsave(left_lane.err_msg + "_" + str(error_im) + ".jpg", img)
+    if 1 < skipped_frames < 3:
+        mpimg.imsave(err_msg + "_" + str(error_im) + ".jpg", img)
         error_im += 1
 
     # Add text
@@ -182,10 +192,10 @@ def pipeline(img):
                 (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
     cv2.putText(result, "Offset: " + lane_off_txt + "m",
                 (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
-    cv2.putText(result, left_lane.fit_method,
+    cv2.putText(result, fit_method,
                 (50, 250), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
-    if left_lane.err_msg != "":
-        cv2.putText(result, "Error!: " + left_lane.err_msg,
+    if err_msg != "":
+        cv2.putText(result, "Error!: " + err_msg,
                     (50, 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
     return result
 
@@ -197,6 +207,7 @@ left_lane = Line()
 right_lane = Line()
 error_im = 1
 skipped_frames = 100
+fit_method = ""
 
 out_clip = clip1.fl_image(pipeline)
 out_clip.write_videofile(clip_name + "_output.mp4", audio=False)
