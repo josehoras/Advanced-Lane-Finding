@@ -6,6 +6,7 @@ from moviepy.editor import VideoFileClip
 import pickle
 from image_thresholding import *
 from plotting_helpers import *
+from line_fit import *
 
 # Class Line
 # Define a class to receive the characteristics of each line detection
@@ -14,7 +15,7 @@ class Line():
         # was the line detected in the last iteration?
         self.detected = False
         # number of frames to keep in history
-        self.nframes = 6
+        self.nframes = 4
         # x values of the last n fits of the line
         self.fit_x = None
         self.fit_x_hist = []
@@ -55,132 +56,6 @@ class Line():
         self.base_pos = self.fit_x[len(self.fit_y)-1]
 
 
-# Functions for polynomial fitting step
-def find_lane_pixels(binary_warped):
-    # Take a histogram of the bottom half of the image
-    histogram = np.sum(binary_warped[binary_warped.shape[0] // 2:, :], axis=0)
-    # Create an output image to draw on and visualize the result
-    out_img = np.dstack((binary_warped, binary_warped, binary_warped))
-    # Find the peak of the left and right halves of the histogram
-    # These will be the starting point for the left and right lines
-    midpoint = np.int(histogram.shape[0] // 2)
-    leftx_base = np.argmax(histogram[:midpoint])
-    rightx_base = np.argmax(histogram[midpoint:]) + midpoint
-
-    # HYPERPARAMETERS
-    nwindows = 9        # Choose the number of sliding windows
-    margin = 130        # Set the width of the windows +/- margin
-    minpix = 50         # Set minimum number of pixels found to recenter window
-
-    # Set height of windows - based on nwindows above and image shape
-    window_height = np.int(binary_warped.shape[0] // nwindows)
-    # Identify the x and y positions of all nonzero pixels in the image
-    nonzero = binary_warped.nonzero()
-    nonzeroy = np.array(nonzero[0])
-    nonzerox = np.array(nonzero[1])
-    # Current positions to be updated later for each window in nwindows
-    leftx_current = leftx_base
-    rightx_current = rightx_base
-    # Create empty lists to receive left and right lane pixel indices
-    left_lane_inds = []
-    right_lane_inds = []
-
-    # Step through the windows one by one
-    for window in range(nwindows):
-        # Identify window boundaries in x and y (and right and left)
-        win_y_low = binary_warped.shape[0] - (window + 1) * window_height
-        win_y_high = binary_warped.shape[0] - window * window_height
-        # the four boundaries of the window
-        win_xleft_low = leftx_current - margin
-        win_xleft_high = leftx_current + margin
-        win_xright_low = rightx_current - margin
-        win_xright_high = rightx_current + margin
-        # Draw the windows on the visualization image
-        # cv2.rectangle(out_img, (win_xleft_low, win_y_low),
-        #               (win_xleft_high, win_y_high), (0, 255, 0), 2)
-        # cv2.rectangle(out_img, (win_xright_low, win_y_low),
-        #               (win_xright_high, win_y_high), (0, 255, 0), 2)
-        # Identify the nonzero pixels in x and y within the window
-        good_left_inds = [i for i in range(len(nonzerox)) if
-                          win_xleft_low < nonzerox[i] < win_xleft_high and
-                          win_y_low < nonzeroy[i] < win_y_high]
-        good_right_inds = [i for i in range(len(nonzerox)) if
-                           win_xright_low < nonzerox[i] < win_xright_high and
-                           win_y_low < nonzeroy[i] < win_y_high]
-        # Append these indices to the lists
-        left_lane_inds.append(good_left_inds)
-        right_lane_inds.append(good_right_inds)
-        # Recenter next window
-        if len(good_left_inds) > minpix:
-            leftx_current = np.int(np.mean(nonzerox[good_left_inds]))
-        if len(good_right_inds) > minpix:
-            rightx_current = np.int(np.mean(nonzerox[good_right_inds]))
-
-    # Concatenate the arrays of indices (previously was a list of lists of pixels)
-    try:
-        left_lane_inds = np.concatenate(left_lane_inds).astype(int)
-        right_lane_inds = np.concatenate(right_lane_inds).astype(int)
-    except ValueError:      # Avoids an error if the above is not implemented fully
-        print("Something bad happened")
-        pass
-
-    # Extract left and right line pixel positions
-    leftx = nonzerox[left_lane_inds]
-    lefty = nonzeroy[left_lane_inds]
-    rightx = nonzerox[right_lane_inds]
-    righty = nonzeroy[right_lane_inds]
-
-    return leftx, lefty, rightx, righty, out_img
-
-
-def find_lane_around_fit(binary_warped):
-    # HYPERPARAMETER
-    margin = 100
-    # Create an output image to draw on and visualize the result
-    out_img = np.dstack((binary_warped, binary_warped, binary_warped))
-    # Grab activated pixels
-    nonzero = binary_warped.nonzero()
-    nonzeroy = np.array(nonzero[0])
-    nonzerox = np.array(nonzero[1])
-
-    x_left = [left_lane.fit_avg[0] * y ** 2 + left_lane.fit_avg[1] * y + left_lane.fit_avg[2]
-              for y in range(binary_warped.shape[0])]
-    x_right = [right_lane.fit_avg[0] * y ** 2 + right_lane.fit_avg[1] * y + right_lane.fit_avg[2]
-               for y in range(binary_warped.shape[0])]
-
-    left_lane_inds = [i for i in range(len(nonzerox)) if
-                      x_left[nonzeroy[i]] - margin < nonzerox[i] < x_left[nonzeroy[i]] + margin]
-    right_lane_inds = [i for i in range(len(nonzerox)) if
-                       x_right[nonzeroy[i]] - margin < nonzerox[i] < x_right[nonzeroy[i]] + margin]
-
-    # Again, extract left and right line pixel positions
-    leftx = nonzerox[left_lane_inds]
-    lefty = nonzeroy[left_lane_inds]
-    rightx = nonzerox[right_lane_inds]
-    righty = nonzeroy[right_lane_inds]
-    return leftx, lefty, rightx, righty, out_img
-
-
-def sanity_chk(ploty, left_fit_cf, right_fit_cf, left_px, right_px, left_curv, right_curv):
-    xm_per_pix = 3.7/700        # meters per pixel in x dimension
-    sane = True
-    err = ""
-    width = (right_px[len(ploty)-1] - left_px[len(ploty)-1]) * xm_per_pix
-    if width > 4.2 or width < 3.2:                      # Is lane width around 3.7m (+/- 0.5)?
-        sane = False
-        err = "No right lane distance"
-    lane_dist = right_px - left_px
-    lane_delta = lane_dist - np.mean(lane_dist)
-    if np.max(lane_delta) > np.mean(lane_dist) / 7:    # Are lanes more or less parallel?
-        sane = False
-        err = err + " - " + "No parallel lanes"
-    # if left_curv < 1800 or right_curv < 1800:           # Is the curvature similar?
-    #     if abs(left_curv - right_curv) > 500:
-    #         sane = False
-    #         err = err + " - " + "No same curvature"
-    return sane, err
-
-
 def find_curv(ally, left_fit, right_fit):
     ym_per_pix = 30 / 720       # meters per pixel in y dimension
     xm_per_pix = 3.7 / 700      # meters per pixel in x dimension
@@ -192,32 +67,6 @@ def find_curv(ally, left_fit, right_fit):
     return curv(left_fit), curv(right_fit)
 
 
-def fit_and_update(leftx, lefty, rightx, righty, y_px):
-    # Fit a second order polynomial to each using `np.polyfit`
-    left_fit = np.polyfit(lefty, leftx, 2)
-    right_fit = np.polyfit(righty, rightx, 2)
-    # Generate x and y values for plotting
-    ploty = np.linspace(0, y_px - 1, y_px)
-    left_px = left_fit[0] * ploty ** 2 + left_fit[1] * ploty + left_fit[2]
-    right_px = right_fit[0] * ploty ** 2 + right_fit[1] * ploty + right_fit[2]
-    # calculate curvature
-    left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
-    # perform sanity check on new lines
-    sane, err = sanity_chk(ploty, left_fit, right_fit, left_px, right_px, left_curv, right_curv)
-    # if fine, we update the lanes values with this last fit
-    if sane or left_lane.fit_method == "Boxes":
-        left_lane.update(ploty, left_fit, left_px, left_curv)
-        right_lane.update(ploty, right_fit, right_px, right_curv)
-        left_lane.skip_frames = 0
-        left_lane.err_msg = err
-    # if wrong we don't update and go with previous fit for some frames until doing the box method
-    else:
-        left_lane.detected = False
-        right_lane.detected = False
-        left_lane.skip_frames += 1
-        left_lane.err_msg = err
-
-
 def lane_offset(screen_size):
     xm_per_pix = 3.7/700 # meters per pixel in x dimension
     lane_w = (right_lane.base_pos - left_lane.base_pos) * xm_per_pix
@@ -227,7 +76,8 @@ def lane_offset(screen_size):
 
 # *** PIPELINE ***
 def pipeline(img):
-    global error_im
+    global error_im, skipped_frames
+
     # Open distorsion matrix
     try:
         saved_dist = pickle.load(open('calibrate_camera.p', 'rb'), encoding='latin1')
@@ -241,23 +91,26 @@ def pipeline(img):
 
     # 2. Apply filters to get binary map
     ksize = 3
-    gradx = abs_sobel_thresh(undist, orient='x', sobel_kernel=ksize, thresh=(15, 100))
-    grady = abs_sobel_thresh(undist, orient='y', sobel_kernel=ksize, thresh=(15, 100))
-    mag_binary = mag_thresh(undist, sobel_kernel=ksize, mag_thresh=(20, 100))
-    dir_binary = dir_threshold(undist, sobel_kernel=15, thresh=(0.9, 1.2))
-    hls_binary = hls_select(img, thresh=(90, 255))
-    combined = np.zeros_like(dir_binary)
+    gradx = abs_sobel_thresh(undist, orient='x', sobel_kernel=ksize, thresh=(10, 100))
+    grady = abs_sobel_thresh(undist, orient='y', sobel_kernel=ksize, thresh=(5, 100))
+    mag_bin = mag_thresh(undist, sobel_kernel=ksize, mag_thresh=(10, 200))
+    dir_bin = dir_threshold(undist, sobel_kernel=15, thresh=(0.9, 1.2))
+    hls_bin = hls_select(img, thresh=(100, 255))
+    white_bin = white_select(img, thresh=175)
+    yellow_bin = yellow_select(img)
+    combined = np.zeros_like(dir_bin)
 
-    combined[((gradx == 1) & (grady == 1) & (dir_binary == 1)) | (hls_binary == 1)] = 1
+    combined[((mag_bin == 1) & ((dir_bin == 1) & (hls_bin == 1) & (white_bin == 1) & (yellow_bin == 1))) |
+             ((white_bin == 1) | (yellow_bin == 1))] = 1
 
     # 3. Define trapezoid points on the road and transform perspective
     X = combined.shape[1]
     Y = combined.shape[0]
     src = np.float32(
-            [[212, 720],
-             [1068, 720],
-             [700, 455],
-             [580, 455]])
+            [[205, 720],
+             [1075, 720],
+             [700, 460],
+             [580, 460]])
     dst = np.float32(
             [[300, 720],
              [980, 720],
@@ -270,20 +123,18 @@ def pipeline(img):
     warped = cv2.warpPerspective(combined, M, (X,Y), flags=cv2.INTER_LINEAR)
 
     # 4. Get polinomial fit of lines
-    # If lanes were detected on previous frame search for new lane around that location
-    if left_lane.skip_frames < 5:
-        leftx, lefty, rightx, righty, out_img = find_lane_around_fit(warped)
-        left_lane.fit_method = "Around fit"
-        right_lane.fit_method = "Around fit"
-        fit_and_update(leftx, lefty, rightx, righty, warped.shape[0])
-    # if we already skipped some frames (or at the beginning, as we initialize frames to a high value)
-    # then do boxes method
-    else:
+    # if > 4 frames skipped (or first frame, as skipped_frames is initialized to 100) do full search
+    if skipped_frames > 4:
         leftx, lefty, rightx, righty, out_img = find_lane_pixels(warped)
         left_lane.fit_method = "Boxes"
         right_lane.fit_method = "Boxes"
         fit_and_update(leftx, lefty, rightx, righty, warped.shape[0])
-    # out_img = fit_polynomial(warped)
+    else:           # If lanes were detected on previous frame search for new lane around that location
+        leftx, lefty, rightx, righty, out_img = find_lane_around_fit(warped, left_lane.fit_x, right_lane.fit_x)
+        left_lane.fit_method = "Around fit"
+        right_lane.fit_method = "Around fit"
+        fit_and_update(leftx, lefty, rightx, righty, warped.shape[0])
+
 
     # 5. Calcutale curvature and distance to center
     lane_w, offset = lane_offset(img.shape[1])
@@ -308,7 +159,7 @@ def pipeline(img):
     result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
 
     # if error save original img to check closely in image pipeline
-    if left_lane.skip_frames == 0 and left_lane.err_msg != "":
+    if 1 < left_lane.skip_frames < 3:
         mpimg.imsave(left_lane.err_msg + "_" + str(error_im) + ".jpg", img)
         error_im += 1
 
@@ -339,12 +190,13 @@ def pipeline(img):
     return result
 
 
-clip_name = "project_video"
-clip1 = VideoFileClip(clip_name + ".mp4")#.subclip(0, 8)
+clip_name = "challenge_video"
+clip1 = VideoFileClip(clip_name + ".mp4").subclip(0, 8)
 
 left_lane = Line()
 right_lane = Line()
 error_im = 1
+skipped_frames = 100
 
 out_clip = clip1.fl_image(pipeline)
 out_clip.write_videofile(clip_name + "_output.mp4", audio=False)
