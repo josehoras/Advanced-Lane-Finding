@@ -26,7 +26,7 @@ def find_curvature(left_fit_cf, right_fit_cf, ploty):
 # *** PIPELINE ***
 
 # Get image
-img_name = " - No parallel lanes_4.jpg"
+img_name = " - No parallel lanes (2.1)_52.jpg"
 # img_name = "test_images/straight_lines2.jpg"
 img = mpimg.imread(img_name)
 print(img.shape)
@@ -48,19 +48,19 @@ ksize = 3
 gradx = abs_sobel_thresh(undist, orient='x', sobel_kernel=ksize, thresh=(10, 100))
 grady = abs_sobel_thresh(undist, orient='y', sobel_kernel=ksize, thresh=(5, 100))
 mag_bin = mag_thresh(undist, sobel_kernel=ksize, mag_thresh=(10, 200))
-dir_bin = dir_threshold(undist, sobel_kernel=15, thresh=(0.75, 1.25))
-hls_bin = hls_select(img, thresh=(80, 255))
-white_bin = white_select(img, thresh=175)
+dir_bin = dir_threshold(undist, sobel_kernel=15, thresh=(0.9, 1.2))
+hls_bin = hls_select(img, thresh=(50, 255))
+white_bin = white_select(img, thresh=188)
 yellow_bin = yellow_select(img)
 combined = np.zeros_like(dir_bin)
 
-combined[((mag_bin == 1) & (dir_bin == 1)) & ((hls_bin == 1) | (white_bin == 1) | (yellow_bin == 1))] = 1
+combined[((mag_bin == 1) & (dir_bin == 1) & (hls_bin == 1)) | ((white_bin == 1) | (yellow_bin == 1))] = 1
 
 # Plot the thresholding step
 plot_thresholds(undist, mag_bin, dir_bin,
                 hls_bin, white_bin, yellow_bin,
-                ((mag_bin == 1) & (dir_bin == 1)), combined,
-                ((hls_bin == 1) | (white_bin == 1) | (yellow_bin == 1)))
+                ((mag_bin == 1) & (dir_bin == 1) & (hls_bin == 1)), combined,
+                ((white_bin == 1) | (yellow_bin == 1)))
 
 # 3. Define trapezoid points on the road and transform perspective
 X = combined.shape[1]

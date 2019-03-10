@@ -135,39 +135,13 @@ def fit(leftx, lefty, rightx, righty, y_px):
         return
 
 
-def fit_and_update(leftx, lefty, rightx, righty, y_px):
-    if len(leftx) == 0 or len(rightx) == 0:
-        left_lane.detected = False
-        right_lane.detected = False
-        left_lane.skip_frames += 1
-        return
-    # Fit
-    left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, y_px)
-    # calculate curvature
-    # left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
-    # perform sanity check on new lines
-    sane, err = sanity_chk(ploty, left_px, right_px)
-    # if fine, we update the lanes values with this last fit
-    if sane or left_lane.fit_method == "Boxes":
-        left_lane.update(ploty, left_fit, left_px, left_curv)
-        right_lane.update(ploty, right_fit, right_px, right_curv)
-        left_lane.skip_frames = 0
-        left_lane.err_msg = err
-    # if wrong we don't update and go with previous fit for some frames until doing the box method
-    else:
-        left_lane.detected = False
-        right_lane.detected = False
-        left_lane.skip_frames += 1
-        left_lane.err_msg = err
-
-
 def sanity_chk(ploty, left_px, right_px):
     sane = True
     err = ""
     width = (right_px[-1] - left_px[-1]) * 3.7/700
-    if width > 4.2 or width < 3.2:                      # Is lane width around 3.7m (+/- 0.5)?
+    if width > 4.5 or width < 3:                      # Is lane width around 3.7m (+/- 0.5)?
         sane = False
-        err = "No right lane distance"
+        err = "No right lane distance ({0:.1f})".format(width)
     farther = len(ploty)//2
     lane_dist = right_px[farther:] - left_px[farther:]
     sigma = np.max(lane_dist) / np.min(lane_dist)

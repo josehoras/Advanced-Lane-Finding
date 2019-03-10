@@ -86,12 +86,12 @@ def pipeline(img):
     grady = abs_sobel_thresh(undist, orient='y', sobel_kernel=ksize, thresh=(5, 100))
     mag_bin = mag_thresh(undist, sobel_kernel=ksize, mag_thresh=(10, 200))
     dir_bin = dir_threshold(undist, sobel_kernel=15, thresh=(0.9, 1.2))
-    hls_bin = hls_select(img, thresh=(100, 255))
-    white_bin = white_select(img, thresh=175)
+    hls_bin = hls_select(img, thresh=(50, 255))
+    white_bin = white_select(img, thresh=188)
     yellow_bin = yellow_select(img)
     combined = np.zeros_like(dir_bin)
 
-    combined[((mag_bin == 1) & ((dir_bin == 1) & (hls_bin == 1) & (white_bin == 1) & (yellow_bin == 1))) |
+    combined[((mag_bin == 1) & (dir_bin == 1) & (hls_bin == 1)) |
              ((white_bin == 1) | (yellow_bin == 1))] = 1
 
     # 3. Define trapezoid points on the road and transform perspective
@@ -115,41 +115,27 @@ def pipeline(img):
 
     # 4. Get polinomial fit of lines
     # if > 4 frames skipped (or first frame, as skipped_frames is initialized to 100) do full search
-    if skipped_frames > 4:
+    if skipped_frames > 7:
         fit_method = "Boxes"
-        # find pixels
         leftx, lefty, rightx, righty, out_img = find_lane_pixels(warped)
-        # fit polynomials
-        try:
-            left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, warped.shape[0])
-            ok, err_msg = sanity_chk(ploty, left_px, right_px)
-        except:
-            ok, err_msg = False, "Empty data"
-        if ok:
-            skipped_frames = 0
-        else:
-            skipped_frames += 1
-        if err_msg != "Empty data":
-            left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
-            left_lane.update(ploty, left_fit, left_px, left_curv)
-            right_lane.update(ploty, right_fit, right_px, right_curv)
     else:           # If lanes were detected on previous frame search for new lane around that location
         fit_method = "Around fit"
-        # find pixels
         leftx, lefty, rightx, righty, out_img = find_lane_around_fit(warped, left_lane.fit_x, right_lane.fit_x)
-        # fit polynomials
-        try:
-            left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, warped.shape[0])
-            ok, err_msg = sanity_chk(ploty, left_px, right_px)
-        except:
-            ok, err_msg = False, "Empty data"
-        if ok:
-            skipped_frames = 0
-            left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
-            left_lane.update(ploty, left_fit, left_px, left_curv)
-            right_lane.update(ploty, right_fit, right_px, right_curv)
-        else:
-            skipped_frames += 1
+
+    # fit polynomials
+    try:
+        left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, warped.shape[0])
+        detected, err_msg = sanity_chk(ploty, left_px, right_px)
+    except:
+        detected, err_msg = False, "Empty data"
+
+    if detected: skipped_frames = 0
+    else:        skipped_frames += 1
+
+    if detected or (fit_method == "Boxes" and err_msg != "Empty data"):
+        left_curv, right_curv = find_curv(ploty, left_fit, right_fit)
+        left_lane.update(ploty, left_fit, left_px, left_curv)
+        right_lane.update(ploty, right_fit, right_px, right_curv)
 
     # 5. Calcutale curvature and distance to center
     lane_w, offset = lane_offset(img.shape[1])
@@ -193,6 +179,10 @@ def pipeline(img):
                 (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
     cv2.putText(result, "Curvature right lane: " + curv_right_txt,
                 (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+    cv2.putText(result, "Skipped frames: " + str(skipped_frames),
+                (520,50), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
+    cv2.putText(result, "Curvature right lane: " + curv_right_txt,
+                (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
     cv2.putText(result, "Lane width: " + lane_width_txt + "m",
                 (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
     cv2.putText(result, "Offset: " + lane_off_txt + "m",
@@ -205,8 +195,8 @@ def pipeline(img):
     return result
 
 
-clip_name = "challenge_video"
-clip1 = VideoFileClip(clip_name + ".mp4").subclip(0, 8)
+clip_name = "harder_challenge_video"
+clip1 = VideoFileClip(clip_name + ".mp4")#.subclip(0, 8)
 
 left_lane = Line()
 right_lane = Line()

@@ -59,7 +59,7 @@ def white_select(img, thresh=200):
 
 
 def yellow_select(img, thresh=(0, 255)):
-    rg_th = 135
+    rg_th = 125
     bl_th = 115
     binary_output = np.zeros_like(img[:, :, 0])
     binary_output[(img[:,:,0] > rg_th) & (img[:,:,1] > rg_th) & (img[:,:,2] < bl_th)] = 1
