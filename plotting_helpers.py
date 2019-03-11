@@ -14,7 +14,7 @@ def plot_calibration(original, corrected):
     ax2.imshow(corrected)
     plt.subplots_adjust(left=0.01, right=0.99, top=0.9, bottom=0)
     plt.show()
-    f.savefig("dist_correct.jpg")
+    f.savefig("output_images/dist_correct.jpg")
     return
 
 
@@ -43,7 +43,7 @@ def plot_thresholds(undist, gradx, grady, mag_binary, dir_binary, hls_binary, x_
     ax9.imshow(dir_hsl, cmap='gray')
     plt.subplots_adjust(left=0.01, right=0.99, top=0.9, bottom=0.01)
     plt.show()
-    f.savefig("thresholds.jpg")
+    f.savefig("output_images/thresholds.jpg")
     return
 
 
@@ -61,7 +61,7 @@ def plot_warping(original, warp, src):
     ax2.set_title('Warped Image', fontsize=18)
     ax2.imshow(warp)
     plt.show()
-    f.savefig("warp.jpg")
+    f.savefig("output_images/warp.jpg")
     return
 
 
@@ -71,5 +71,5 @@ def plot_img(image):
     # plt.tight_layout(pad=0.01, rect=(0,-0.1,1,1.1))
     plt.subplots_adjust(left=0.1, right=0.95, top=1, bottom=0)
     # plt.margins(y=0)
-    plt.savefig("fit2.jpg")
+    # plt.savefig("output_images/fit.jpg")
     plt.show()

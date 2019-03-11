@@ -144,8 +144,8 @@ right_lane = Line()
 error_im = 1
 skipped_frames = 100
 # load video
-clip_name = "project_video"
+clip_name = "challenge_video"
 clip1 = VideoFileClip(clip_name + ".mp4")#.subclip(0, 8)
 # run video through the pipeline and save output
 out_clip = clip1.fl_image(pipeline)
-out_clip.write_videofile(clip_name + "_output.mp4", audio=False)
+out_clip.write_videofile("output_videos/" + clip_name + "_output.mp4", audio=False)
