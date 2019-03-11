@@ -84,10 +84,9 @@ After getting our two lanes a sanity check is performed, implemented in function
 #### 5. Calculate the road curvature and vehicle position on lane
 
 This step is found on line #81 of the pipeline. The function `find_curv()` is located on `line_fit.py`. It uses the following equation to calculate the radius of curvature:
-R<sub>curve</sub>=(1 + (2Ay + B)<sup>2</sup>)<sup>3/2</sup> / |2A|\begin{aligned}
- AR(p): Y_i &= c + \epsilon_i + \phi_i Y_{i-1} \dots \\
- Y_{i} &= c + \phi_i Y_{i-1} \dots
-\end{aligned}
+
+*R<sub>curve</sub>=(1 + (2Ay + B)<sup>2</sup>)<sup>3/2</sup> / |2A|*
+
 Being the fitted line expresion: *f(y) = Ay<sup>2</sup> + By + C*. The funtion calculates the curvature for both lane and these are averaged for the final value of road curvature.
 
 The lane width and car offset are calculated from the position of the fitted lanes at the bottom of the screen, and the screen width on lines #84, #85
