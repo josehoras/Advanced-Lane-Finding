@@ -85,7 +85,7 @@ After getting our two lanes a sanity check is performed, implemented in function
 
 This step is found on line #81 of the pipeline. The function `find_curv()` is located on `line_fit.py`. It uses the following equation to calculate the radius of curvature:
 
-*R<sub>curve</sub>=(1 + (2Ay + B)<sup>2</sup>)<sup>3/2</sup> / |2A|*
+*R<sub>curve</sub> = (1 + (2Ay + B)<sup>2</sup>)<sup>3/2</sup> / |2A|*
 
 Being the fitted line expresion: *f(y) = Ay<sup>2</sup> + By + C*. The funtion calculates the curvature for both lane and these are averaged for the final value of road curvature.
 
