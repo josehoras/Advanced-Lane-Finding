@@ -30,7 +30,7 @@ The code for this step is contained in the file `camera_calibration.py`. OpenCV 
 
 I then used the output `objpoints` and `imgpoints` to compute the camera calibration and distortion coefficients using the `cv2.calibrateCamera()` function.  I applied this distortion correction to the test image using the `cv2.undistort()`, as shown below. The calibration matrix is saved in the file `calibrate_camera.p` for later use in the image and video pipelines. 
 
-![alt text](./chessboard_correct.jpg)
+![alt text](output_images/chessboard_correct.jpg)
 
 ### Pipeline (single images)
 
@@ -53,7 +53,7 @@ The pipeline consists of the following steps:
 
 Right after loading the test image, the first step on lines #18 to #28, opens the saved calibration matrix and applies to the original image to get an undistorted image.  Finally I invoke the function I placed on `plotting_helpers.py` to plot both images and saved it to a file for use in this Writeup, as displayed below. This line can be commented to focus on later steps of the pipeline.
 
-![alt text](dist_correct.jpg)
+![alt text](output_images/dist_correct.jpg)
 
 #### 2. Apply filters to select the lane pixels
 
@@ -65,7 +65,7 @@ These threshold functions are defined on `image_thresholding.py`. After getting 
 ```
 Which translates to: I take the pixels that have a high gradient, provided they have the right direction, and have a defined saturation range. Then add the pixels that are yellow or white. The results of the different filters, their partial combinations and final combined results are:
 
-![alt text](thresholds.jpg)
+![alt text](output_images/thresholds.jpg)
 
 #### 3. Perspective transform to a bird-eye view
 
@@ -84,7 +84,7 @@ The source and destination points, defined in lines #52 to #61, are:
 
 On the image below the condition of parallelity and the lanes being around 700 pixels apart, are apparent. I apply the same warping to the binary image result of combining filters in the last step.
 
-![alt text](warp.jpg)
+![alt text](output_images/warp.jpg)
 
 #### 4. Obtain a polynomial fit of the road lanes
 
@@ -96,7 +96,7 @@ This functionality is enabled in `line_fit.py`, functions `fit_polynomial()` and
 
 The pixels inside these boxes are selected and fitted using `np.polyfit()`, as shown here:
 
-![alt text](fit.jpg)
+![alt text](output_images/fit.jpg)
 
 After getting our two lanes a sanity check is performed, implemented in function `sanity_chk()` on `line_fit.py`. It will check if the lane width and lanes parallelity are within reasonable values, and report an error message if not.
 
@@ -104,7 +104,7 @@ After getting our two lanes a sanity check is performed, implemented in function
 
 This step is found on line #81 of the pipeline. The function `find_curv()` is located on `line_fit.py`. It uses the following equation to calculate the radius of curvature:
 $$R_{curve}=\frac{(1+(2Ay+B)^2)^{3/2}}{|2A|}$$
-Being the fitted line expresion: *f(y) = Ay<sup>2</sup> + By + C*. The funtion calculates the curvature for both lane and these are averaged for th final value of road curvature.
+Being the fitted line expresion: *f(y) = Ay<sup>2</sup> + By + C*. The funtion calculates the curvature for both lane and these are averaged for the final value of road curvature.
 
 The lane width and car offset are calculated from the position of the fitted lanes at the bottom of the screen, and the screen width on lines #84, #85
 
@@ -114,13 +114,13 @@ I used the implementation suggested in the project tips on lines #94 through #11
 
 Here is an example of my result on a test image:
 
-![alt text](im_output.jpg)
+![alt text](output_images/im_output.jpg)
 
 ---
 
 ### Pipeline (video)
 
-Here's a [link to my video result](./project_video_output.mp4)
+Here's a [link to my video result](output_videos/project_video_output.mp4)
 
 The code in the image pipeline was reused for the video pipeline (`video_pipeline.py`). This was good to achieved the accuracy shown in the link above. However, when attacking the `challenge_video.mp4`, the pipeline was not able to achieve decent accuracy. Apart from the white and yellow filters mentioned on the step2, I made the following improvements to the video pipeline:
 
@@ -130,7 +130,7 @@ The code in the image pipeline was reused for the video pipeline (`video_pipelin
 
 - For more robutness of the lane position, I use an average of the last 4 frames with correct line fitting.
 
-While not perfect, the pipeline is able to annotate the challenge video most os the time. Here's a [link to the challenge video result](./challenge_video_output.mp4)
+While not perfect, the pipeline is able to annotate the challenge video most os the time. Here's a [link to the challenge video result](output_videos/challenge_video_output.mp4)
 
 ---
 
@@ -140,7 +140,7 @@ Here I want to highlight the following points:
 
 - I implemented white and yellow filters to overcome the difficulty of the pipeline detecting cracks on the road as lanes, due to their high gradient. Discarding those pixels through the saturation filter also discarded most of the lane pixels. Adding a portion of white and yellow pixels produce enough correct data to fit. However, white (or yellow) cars on the road would confuse this method, and is the origin of some wobbling seen in the challenge video.
 
-- Although some frames are recognized on `harder_challenge_video.mp4` ([link](harder_challenge_video_output.mp4)), there is much improvement needed to achieve a decent lane annotation. Two ideas come to mind:
+- Although some frames are recognized on `harder_challenge_video.mp4` ([link](output_videos/harder_challenge_video_output.mp4)), there is much improvement needed to achieve a decent lane annotation. Two ideas come to mind:
 	- The different ilumination conditions present in the same video is the bigger challenge.The filters to select the relevant pixels on step 2 have hardcoded thresholds that work well in certain illumination conditions, but not so well on others. I would improve this by introducing an image preprocessing step that delivers more uniform images to the filters (currently only RGB to GRAY is done).
 	- On very close bends the lanes go out of the screen on the side, with one lane even totally disappearing at one point. The search algorithm needs to recognize here that the lane ends at the side of the screen and stop seachring in a region above. Also, the two lanes can be treated more separately and allow only one lane to be processed. Currently the quality check discard the frame based on the respective positions of the two lanes, and fails if one one lane is in the wrong.
 	
