@@ -12,7 +12,8 @@ from line_fit import *
 # *** PIPELINE ***
 # Get image
 # img_name = " - No parallel lanes (1.5)_2.jpg"
-img_name = "test_images/test3.jpg"
+name = "straight_lines2"
+img_name = "test_images/" + name + ".jpg"
 img = mpimg.imread(img_name)
 
 # 1. Correct distorsion
@@ -121,4 +122,4 @@ cv2.putText(result, offset_txt, (75, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 25
 
 plot_img(result)
 
-mpimg.imsave("im_output.jpg", result)
+mpimg.imsave("output_images/"+ name + "_output.jpg", result)
