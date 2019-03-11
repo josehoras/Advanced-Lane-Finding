@@ -101,7 +101,10 @@ Here is an example of my result on a test image:
 
 ### Pipeline (video)
 
-Here's a [link to my video result](output_videos/project_video_output.mp4)
+After observing difficulties visualizing mp4 videos on the browser in GitHub, I provide my output videos in a second backup format webm (albeit with lower quality). Both formats show the same video, which should run when downloaded locally.
+
+- [ project video result (mp4)](output_videos/project_video_output.mp4)
+- [ project video result (webm)](output_videos/project_video_output.mp4)
 
 The code in the image pipeline was reused for the video pipeline (`video_pipeline.py`). This was good to achieved the accuracy shown in the link above. However, when attacking the `challenge_video.mp4`, the pipeline was not able to achieve decent accuracy. Apart from the white and yellow filters mentioned on the step2, I made the following improvements to the video pipeline:
 
@@ -111,7 +114,9 @@ The code in the image pipeline was reused for the video pipeline (`video_pipelin
 
 - For more robutness of the lane position, I use an average of the last 4 frames with correct line fitting.
 
-While not perfect, the pipeline is able to annotate the challenge video most os the time. Here's a [link to the challenge video result](output_videos/challenge_video_output.mp4)
+While not perfect, the pipeline is able to annotate the challenge video most os the time. 
+- [challenge video result (mp4)](output_videos/challenge_video_output.mp4)
+- [challenge video result (webm)](output_videos/challenge_video_output.mp4)
 
 ---
 
@@ -121,7 +126,7 @@ Here I want to highlight the following points:
 
 - I implemented white and yellow filters to overcome the difficulty of the pipeline detecting cracks on the road as lanes, due to their high gradient. Discarding those pixels through the saturation filter also discarded most of the lane pixels. Adding a portion of white and yellow pixels produce enough correct data to fit. However, white (or yellow) cars on the road would confuse this method, and is the origin of some wobbling seen in the challenge video.
 
-- Although some frames are recognized on `harder_challenge_video.mp4` ([link](output_videos/harder_challenge_video_output.mp4)), there is much improvement needed to achieve a decent lane annotation. Two ideas come to mind:
+- Although some frames are recognized on `harder_challenge_video.mp4` ([mp4](output_videos/harder_challenge_video_output.mp4), [webm](output_videos/harder_challenge_video_output.mp4)), there is much improvement needed to achieve a decent lane annotation. Two ideas come to mind:
 	- The different ilumination conditions present in the same video is the bigger challenge.The filters to select the relevant pixels on step 2 have hardcoded thresholds that work well in certain illumination conditions, but not so well on others. I would improve this by introducing an image preprocessing step that delivers more uniform images to the filters (currently only RGB to GRAY is done).
 	- On very close bends the lanes go out of the screen on the side, with one lane even totally disappearing at one point. The search algorithm needs to recognize here that the lane ends at the side of the screen and stop seachring in a region above. Also, the two lanes can be treated more separately and allow only one lane to be processed. Currently the quality check discard the frame based on the respective positions of the two lanes, and fails if one one lane is in the wrong.
 	
