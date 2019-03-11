@@ -9,30 +9,14 @@ from plotting_helpers import *
 from line_fit import *
 
 
-def find_curvature(left_fit_cf, right_fit_cf, ploty):
-    # Calculate curvature of fits
-    # Define conversions in x and y from pixels space to meters
-    ym_per_pix = 30/720 # meters per pixel in y dimension
-    xm_per_pix = 3.7/700 # meters per pixel in x dimension
-    r_y = ploty * ym_per_pix
-
-    def curv(fit_cf):
-        a = (xm_per_pix / ym_per_pix ** 2) * fit_cf[0]
-        b = (xm_per_pix / ym_per_pix) * fit_cf[1]
-        return np.mean(((1 + (2 * a * r_y + b)**2)**(3/2)) / abs(2 * a))
-    return curv(left_fit_cf), curv(right_fit_cf)
-
-
 # *** PIPELINE ***
-
 # Get image
-img_name = " - No parallel lanes (2.1)_52.jpg"
-# img_name = "test_images/straight_lines2.jpg"
+# img_name = " - No parallel lanes (1.5)_2.jpg"
+img_name = "test_images/test3.jpg"
 img = mpimg.imread(img_name)
-print(img.shape)
 
 # 1. Correct distorsion
-# Open distorsion matrix
+# open distorsion matrix
 try:
     saved_dist = pickle.load(open('calibrate_camera.p', 'rb'), encoding='latin1')
     mtx = saved_dist['mtx']
@@ -50,17 +34,17 @@ grady = abs_sobel_thresh(undist, orient='y', sobel_kernel=ksize, thresh=(5, 100)
 mag_bin = mag_thresh(undist, sobel_kernel=ksize, mag_thresh=(10, 200))
 dir_bin = dir_threshold(undist, sobel_kernel=15, thresh=(0.9, 1.2))
 hls_bin = hls_select(img, thresh=(50, 255))
-white_bin = white_select(img, thresh=188)
+white_bin = white_select(img, thresh=195)
 yellow_bin = yellow_select(img)
+# combine filters to a final output
 combined = np.zeros_like(dir_bin)
-
 combined[((mag_bin == 1) & (dir_bin == 1) & (hls_bin == 1)) | ((white_bin == 1) | (yellow_bin == 1))] = 1
 
 # Plot the thresholding step
-plot_thresholds(undist, mag_bin, dir_bin,
-                hls_bin, white_bin, yellow_bin,
-                ((mag_bin == 1) & (dir_bin == 1) & (hls_bin == 1)), combined,
-                ((white_bin == 1) | (yellow_bin == 1)))
+# plot_thresholds(undist, mag_bin, dir_bin,
+#                 hls_bin, white_bin, yellow_bin,
+#                 ((mag_bin == 1) & (dir_bin == 1) & (hls_bin == 1)), combined,
+#                 ((white_bin == 1) | (yellow_bin == 1)))
 
 # 3. Define trapezoid points on the road and transform perspective
 X = combined.shape[1]
@@ -81,30 +65,34 @@ Minv = cv2.getPerspectiveTransform(dst, src)
 # Warp the result of binary thresholds
 warped = cv2.warpPerspective(combined, M, (X,Y), flags=cv2.INTER_LINEAR)
 # Plot warping step
-# plot_warping(combined, warped, src)
+# for i in range(len(src)):
+#     cv2.line(undist, (src[i][0], src[i][1]), (src[(i + 1) % 4][0], src[(i + 1) % 4][1]), (255, 0, 0), 2)
+# img_warped = cv2.warpPerspective(undist, M, (X,Y), flags=cv2.INTER_LINEAR)
+# plot_warping(undist, img_warped, src)
 
 # 4. Get polinomial fit of lines
-plot_poly = True
-out_img, left_fit_cf, right_fit_cf,  left_fitx, right_fitx, ploty = fit_polynomial(warped, plot=plot_poly)
+out_img, left_fit_cf, right_fit_cf,  left_fitx, right_fitx, ploty = fit_polynomial(warped)
 # leftx, lefty, rightx, righty, out_img = find_lane_pixels(warped)
 ok, err = sanity_chk(ploty, left_fitx, right_fitx)
 print(ok, err)
 # Plot polynomial result
-if plot_poly: plot_img(out_img)
+# plot_img(out_img)
 
-# 5. Calcutale curvature
-curv_left, curv_right = find_curvature(left_fit_cf, right_fit_cf, ploty)
+# 5. Calculate curvature
+curv_left, curv_right = find_curv(ploty, left_fit_cf, right_fit_cf)
+road_curv = (curv_left + curv_right) / 2
+lane_w = (right_fitx[-1] - left_fitx[-1]) * 3.7/700
+offset = (((right_fitx[-1] + left_fitx[-1]) - img.shape[1]) / 2) * 3.7/700
 
-print("base dist:  ", right_fitx[len(ploty)-1] - left_fitx[len(ploty)-1])
+print("base dist:  ", right_fitx[-1] - left_fitx[-1])
 print("upper dist: ", right_fitx[0] - left_fitx[0])
 print("Curvature left: ", curv_left)
 print("Curvature right: ", curv_right)
-
-
-
+print("Lane width: ", lane_w)
+print("Offset: ", offset)
 
 # 6. Plot fitted lanes into original image
-# Create an image to draw the lines on
+# create an image to draw the lines on
 warp_zero = np.zeros_like(warped).astype(np.uint8)
 color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
 
@@ -122,4 +110,15 @@ newwarp = cv2.warpPerspective(color_warp, Minv, (img.shape[1], img.shape[0]))
 # print("newwarp: ", newwarp.shape)
 # Combine the result with the original image
 result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
+
+# add text
+curv_txt = "Radius of curvature: {0:.0f}m".format(road_curv)
+side = {True: "left", False: "right"}
+offset_txt = "Car is {0:.2f}m {1:s} of center".format(offset, side[offset>0])
+
+cv2.putText(result, curv_txt, (75, 75), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
+cv2.putText(result, offset_txt, (75, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
+
 plot_img(result)
+
+mpimg.imsave("im_output.jpg", result)

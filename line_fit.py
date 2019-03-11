@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 
+
 # Functions for polynomial fitting step
 def find_lane_pixels(binary_warped):
     # Take a histogram of the bottom half of the image
@@ -25,6 +26,7 @@ def find_lane_pixels(binary_warped):
     nonzero = binary_warped.nonzero()
     nonzeroy = np.array(nonzero[0])
     nonzerox = np.array(nonzero[1])
+    out_img[nonzeroy, nonzerox] = [255, 255, 255]
     # Current positions to be updated later for each window in nwindows
     leftx_current = leftx_base
     rightx_current = rightx_base
@@ -103,13 +105,17 @@ def find_lane_around_fit(binary_warped, x_left, x_right):
     return leftx, lefty, rightx, righty, out_img
 
 
-def fit_polynomial(binary_warped, plot=True):
+def fit_polynomial(binary_warped, plot=False):
     # Find our lane pixels first
     leftx, lefty, rightx, righty, out_img = find_lane_pixels(binary_warped)
     # fit if leftx, rightx are not empty
     left_fit, right_fit, left_px, right_px, ploty = fit(leftx, lefty, rightx, righty, out_img.shape[0])
 
     # Visualization
+    nonzero = binary_warped.nonzero()
+    nonzeroy = np.array(nonzero[0])
+    nonzerox = np.array(nonzero[1])
+    out_img[nonzeroy, nonzerox] = [255, 255, 255]
     out_img[lefty, leftx] = [255, 0, 0]
     out_img[righty, rightx] = [0, 0, 255]
     # Plots the left and right polynomials on the lane lines
@@ -155,6 +161,7 @@ def sanity_chk(ploty, left_px, right_px):
     #         sane = False
     #         err = err + " - " + "No same curvature"
     return sane, err
+
 
 def find_curv(ally, left_fit, right_fit):
     ym_per_pix = 30 / 720       # meters per pixel in y dimension

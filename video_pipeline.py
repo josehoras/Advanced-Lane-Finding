@@ -115,23 +115,24 @@ def pipeline(img):
         road_curv_text = "Road curvature: straight"
     else:
         road_curv_text = "Road curvature: " + str(road_curv) + "m"
-    lane_width_txt = "Lane width: %.2f m" % lane_w
-    lane_off_txt = "Offset: %.2f m" % offset
+    side = {True: "left", False: "right"}
+    offset_txt = "Car is {0:.2f}m {1:s} of center".format(offset, side[offset > 0])
 
-    for i, txt in enumerate([road_curv_text, lane_width_txt, lane_off_txt]):
-        cv2.putText(result, txt, (50, 50 * (i+1)), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
+    for i, txt in enumerate([road_curv_text, offset_txt]):
+        cv2.putText(result, txt, (75, 75 * (i+1)), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
 
-    # Umcomment for debugging messages
-    for i, obj, txt in [(1, left_lane, "Left"), (2, right_lane, "Right")]:
-        if obj.curv_avg > 2000:
-            curv_txt = txt + " curvature: straight"
-        else:
-            curv_txt = txt + " curvature: " + str(int(obj.curv_avg)) + "m"
-        cv2.putText(result,curv_txt, (550, 50 * i), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
-    cv2.putText(result, "Skipped frames: " + str(skipped_frames), (550,150), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
-    cv2.putText(result, fit_method, (550, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
-    if err_msg != "":
-        cv2.putText(result, "Error!: " + err_msg, (550, 250), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
+    # Uncomment for debugging messages
+    # lane_width_txt = "Lane width: %.2f m" % lane_w
+    # for i, obj, txt in [(1, left_lane, "Left"), (2, right_lane, "Right")]:
+    #     if obj.curv_avg > 2000:
+    #         curv_txt = txt + " curvature: straight"
+    #     else:
+    #         curv_txt = txt + " curvature: " + str(int(obj.curv_avg)) + "m"
+    #     cv2.putText(result,curv_txt, (550, 50 * i), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
+    # cv2.putText(result, "Skipped frames: " + str(skipped_frames), (550,150), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
+    # cv2.putText(result, fit_method, (550, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
+    # if err_msg != "":
+    #     cv2.putText(result, "Error!: " + err_msg, (550, 250), cv2.FONT_HERSHEY_SIMPLEX, 1, 0, 2)
 
     return result
 
@@ -143,7 +144,7 @@ right_lane = Line()
 error_im = 1
 skipped_frames = 100
 # load video
-clip_name = "challenge_video"
+clip_name = "project_video"
 clip1 = VideoFileClip(clip_name + ".mp4")#.subclip(0, 8)
 # run video through the pipeline and save output
 out_clip = clip1.fl_image(pipeline)
