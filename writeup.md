@@ -30,7 +30,7 @@ The code for this step is contained in the file `camera_calibration.py`. OpenCV 
 
 I then used the output `objpoints` and `imgpoints` to compute the camera calibration and distortion coefficients using the `cv2.calibrateCamera()` function.  I applied this distortion correction to the test image using the `cv2.undistort()`, as shown below. The calibration matrix is saved in the file `calibrate_camera.p` for later use in the image and video pipelines. 
 
-![alt text](chessboard_correct.jpg)
+![alt text](./chessboard_correct.jpg)
 
 ### Pipeline (single images)
 
