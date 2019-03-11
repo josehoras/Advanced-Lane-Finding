@@ -13,7 +13,7 @@ The goals / steps of this project are the following:
 
 
 <video width="320" height="240">
-  <source src="output_videos/project_video_output.mp4" type="video/mp4">
+  <source src="project_video.mp4" type="video/mp4">
 </video>
 
 
